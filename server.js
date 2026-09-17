@@ -203,7 +203,9 @@ app.post("/telegram/webhook", async (req, res) => {
             delete userStates[chatId];
 
             await removeKeyboard(
+
                 chatId,
+
                 "✈️ Добро пожаловать в Shohin Airlines Bot!\n\n" +
 
                 "Система учета пассажиров Shohin Airlines.\n\n" +
@@ -213,6 +215,7 @@ app.post("/telegram/webhook", async (req, res) => {
                 "/add — добавить пассажира\n" +
 
                 "/help — помощь"
+
             );
 
             return res
@@ -260,12 +263,15 @@ app.post("/telegram/webhook", async (req, res) => {
             };
 
             await removeKeyboard(
+
                 chatId,
+
                 "➕ Добавление пассажира\n\n" +
 
                 "Шаг 1 из 11\n\n" +
 
                 "Введите фамилию пассажира:"
+
             );
 
             return res
@@ -677,22 +683,44 @@ app.post("/telegram/webhook", async (req, res) => {
                 // ===============================
                 // CREATE ROW
                 // ===============================
+                //
+                // ВАЖНО:
+                //
+                // H = Рейс
+                // I = Дата рейса
+                // J = Маршрут
+                //
+                // Поэтому здесь:
+                //
+                // state.data[6] = Рейс
+                // state.data[7] = Маршрут
+                // state.data[8] = Дата рейса
+                //
+                // В Google Sheets записываем:
+                //
+                // H -> data[6]
+                // I -> data[8]
+                // J -> data[7]
+                //
+                // ===============================
 
                 const row = [
 
                     passengerId,
 
-                    state.data[0], // Фамилия
-                    state.data[1], // Имя
-                    state.data[2], // Отчество
-                    state.data[3], // Дата рождения
-                    state.data[4], // Паспорт
-                    state.data[5], // Гражданство
-                    state.data[6], // Рейс
-                    state.data[7], // Дата рейса
-                    state.data[8], // Маршрут
-                    state.data[9], // Багаж
-                    state.data[10] // Статус
+                    state.data[0],  // B — Фамилия
+                    state.data[1],  // C — Имя
+                    state.data[2],  // D — Отчество
+                    state.data[3],  // E — Дата рождения
+                    state.data[4],  // F — Паспорт
+                    state.data[5],  // G — Гражданство
+                    state.data[6],  // H — Рейс
+
+                    state.data[8],  // I — Дата рейса
+                    state.data[7],  // J — Маршрут
+
+                    state.data[9],  // K — Багаж
+                    state.data[10]  // L — Статус
 
                 ];
 
@@ -714,7 +742,7 @@ app.post("/telegram/webhook", async (req, res) => {
                 delete userStates[chatId];
 
                 // ===============================
-                // SUCCESS
+                // SUCCESS MESSAGE
                 // ===============================
 
                 await removeKeyboard(
