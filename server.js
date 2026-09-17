@@ -69,7 +69,7 @@ app.post("/telegram/webhook", async (req, res) => {
             if (text === "/start") {
                 await sendMessage(
                     chatId,
-                    "✈️ Добро пожаловать в KMRN Passenger Bot!\n\n" +
+                    "✈️ Добро пожаловать в Shohin Airlines Bot!\n\n" +
                     "Бот для учета пассажиров.\n\n" +
                     "Доступные команды:\n" +
                     "/add — добавить пассажира\n" +
