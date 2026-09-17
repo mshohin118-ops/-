@@ -9,10 +9,9 @@ const PORT = process.env.PORT || 3000;
 
 const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const SPREADSHEET_ID = process.env.GOOGLE_SHEET_ID;
-const SHEET_NAME = "Пассажиры";
 
 // ===============================
-// GOOGLE SHEETS
+// GOOGLE AUTHENTICATION
 // ===============================
 
 const googleAuth = new google.auth.GoogleAuth({
@@ -26,24 +25,27 @@ const googleAuth = new google.auth.GoogleAuth({
 });
 
 // ===============================
-// ВРЕМЕННОЕ СОСТОЯНИЕ ПОЛЬЗОВАТЕЛЕЙ
+// USER STATES
 // ===============================
 
 const userStates = {};
 
 // ===============================
-// ОТПРАВКА СООБЩЕНИЯ В TELEGRAM
+// TELEGRAM SEND MESSAGE
 // ===============================
 
 async function sendMessage(chatId, text) {
+
     const url =
         `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
 
     await fetch(url, {
         method: "POST",
+
         headers: {
             "Content-Type": "application/json"
         },
+
         body: JSON.stringify({
             chat_id: chatId,
             text: text
@@ -52,10 +54,11 @@ async function sendMessage(chatId, text) {
 }
 
 // ===============================
-// ДОБАВЛЕНИЕ ПАССАЖИРА В GOOGLE SHEETS
+// ADD PASSENGER TO GOOGLE SHEETS
 // ===============================
 
 async function addPassenger(values) {
+
     const authClient = await googleAuth.getClient();
 
     const sheets = google.sheets({
@@ -63,22 +66,55 @@ async function addPassenger(values) {
         auth: authClient
     });
 
+    // Получаем информацию о таблице
+    const spreadsheet = await sheets.spreadsheets.get({
+        spreadsheetId: SPREADSHEET_ID
+    });
+
+    const firstSheet = spreadsheet.data.sheets[0];
+
+    if (!firstSheet) {
+        throw new Error(
+            "В Google Таблице не найден ни один лист"
+        );
+    }
+
+    const sheetTitle =
+        firstSheet.properties.title;
+
+    console.log(
+        "Google Sheet:",
+        sheetTitle
+    );
+
+    // Записываем данные в первый лист
     await sheets.spreadsheets.values.append({
+
         spreadsheetId: SPREADSHEET_ID,
-        range: `'${SHEET_NAME}'!A:L`,
+
+        range: `${sheetTitle}!A:L`,
+
         valueInputOption: "USER_ENTERED",
+
         requestBody: {
             values: [values]
         }
     });
+
+    console.log(
+        "Пассажир успешно записан в Google Sheets"
+    );
 }
 
 // ===============================
-// ГЛАВНАЯ СТРАНИЦА
+// MAIN PAGE
 // ===============================
 
 app.get("/", (req, res) => {
-    res.send("Shohin Airlines Bot работает");
+
+    res.send(
+        "Shohin Airlines Bot работает"
+    );
 });
 
 // ===============================
@@ -92,11 +128,22 @@ app.post("/telegram/webhook", async (req, res) => {
         const update = req.body;
 
         if (!update.message) {
-            return res.status(200).send("OK");
+
+            return res
+                .status(200)
+                .send("OK");
         }
 
-        const chatId = update.message.chat.id;
-        const text = update.message.text || "";
+        const chatId =
+            update.message.chat.id;
+
+        const text =
+            update.message.text || "";
+
+        console.log(
+            "Telegram message:",
+            text
+        );
 
         // ===============================
         // START
@@ -120,7 +167,9 @@ app.post("/telegram/webhook", async (req, res) => {
                 "/help — помощь"
             );
 
-            return res.status(200).send("OK");
+            return res
+                .status(200)
+                .send("OK");
         }
 
         // ===============================
@@ -139,17 +188,21 @@ app.post("/telegram/webhook", async (req, res) => {
                 "/help — помощь"
             );
 
-            return res.status(200).send("OK");
+            return res
+                .status(200)
+                .send("OK");
         }
 
         // ===============================
-        // ADD
+        // ADD PASSENGER
         // ===============================
 
         if (text === "/add") {
 
             userStates[chatId] = {
+
                 step: 1,
+
                 data: []
             };
 
@@ -163,16 +216,19 @@ app.post("/telegram/webhook", async (req, res) => {
                 "Введите фамилию пассажира:"
             );
 
-            return res.status(200).send("OK");
+            return res
+                .status(200)
+                .send("OK");
         }
 
         // ===============================
-        // ДОБАВЛЕНИЕ ПАССАЖИРА
+        // PASSENGER DATA
         // ===============================
 
         if (userStates[chatId]) {
 
-            const state = userStates[chatId];
+            const state =
+                userStates[chatId];
 
             state.data.push(text);
 
@@ -200,7 +256,9 @@ app.post("/telegram/webhook", async (req, res) => {
 
             ];
 
-            // Если это еще не последний вопрос
+            // ===============================
+            // NEXT QUESTION
+            // ===============================
 
             if (state.step < 11) {
 
@@ -210,60 +268,73 @@ app.post("/telegram/webhook", async (req, res) => {
                     chatId,
 
                     `Шаг ${state.step} из 11\n\n` +
+
                     questions[state.step - 2]
                 );
 
-                return res.status(200).send("OK");
+                return res
+                    .status(200)
+                    .send("OK");
             }
 
             // ===============================
-            // СОЗДАЕМ ID
+            // CREATE PASSENGER ID
             // ===============================
 
-            const passengerId = Date.now();
+            const passengerId =
+                Date.now();
 
             // ===============================
-            // ФОРМИРУЕМ СТРОКУ
+            // CREATE ROW
             // ===============================
 
             const row = [
 
                 passengerId,
 
-                state.data[0],  // Фамилия
+                state.data[0],
 
-                state.data[1],  // Имя
+                state.data[1],
 
-                state.data[2],  // Отчество
+                state.data[2],
 
-                state.data[3],  // Дата рождения
+                state.data[3],
 
-                state.data[4],  // Паспорт
+                state.data[4],
 
-                state.data[5],  // Гражданство
+                state.data[5],
 
-                state.data[6],  // Рейс
+                state.data[6],
 
-                state.data[7],  // Дата рейса
+                state.data[7],
 
-                state.data[8],  // Маршрут
+                state.data[8],
 
-                state.data[9],  // Багаж
+                state.data[9],
 
-                state.data[10]  // Статус
+                state.data[10]
 
             ];
 
+            console.log(
+                "Добавляем пассажира с ID:",
+                passengerId
+            );
+
             // ===============================
-            // ЗАПИСЫВАЕМ В GOOGLE SHEETS
+            // SAVE TO GOOGLE SHEETS
             // ===============================
 
             await addPassenger(row);
 
+            // ===============================
+            // CLEAR USER STATE
+            // ===============================
+
             delete userStates[chatId];
 
             // ===============================
-            // ПОДТВЕРЖДЕНИЕ
+            // SUCCESS MESSAGE
             // ===============================
 
             await sendMessage(
@@ -276,11 +347,13 @@ app.post("/telegram/webhook", async (req, res) => {
                 "Данные сохранены в Google Таблицу."
             );
 
-            return res.status(200).send("OK");
+            return res
+                .status(200)
+                .send("OK");
         }
 
         // ===============================
-        // НЕИЗВЕСТНАЯ КОМАНДА
+        // UNKNOWN COMMAND
         // ===============================
 
         await sendMessage(
@@ -288,21 +361,33 @@ app.post("/telegram/webhook", async (req, res) => {
 
             "❓ Неизвестная команда.\n\n" +
 
-            "Используйте /help для просмотра доступных команд."
+            "Используйте /help."
         );
 
-        return res.status(200).send("OK");
+        return res
+            .status(200)
+            .send("OK");
 
     } catch (error) {
 
-        console.error("BOT ERROR:", error);
+        console.error(
+            "BOT ERROR:",
+            error.message
+        );
 
-        return res.status(200).send("OK");
+        console.error(
+            "FULL ERROR:",
+            error
+        );
+
+        return res
+            .status(200)
+            .send("OK");
     }
 });
 
 // ===============================
-// ЗАПУСК СЕРВЕРА
+// START SERVER
 // ===============================
 
 app.listen(PORT, () => {
