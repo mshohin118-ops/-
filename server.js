@@ -34,12 +34,50 @@ const userStates = {};
 // TELEGRAM SEND MESSAGE
 // ===============================
 
-async function sendMessage(chatId, text) {
+async function sendMessage(chatId, text, keyboard = null) {
+
+    const url =
+        `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
+
+    const body = {
+        chat_id: chatId,
+        text: text
+    };
+
+    if (keyboard) {
+
+        body.reply_markup = {
+            keyboard: keyboard,
+            resize_keyboard: true,
+            one_time_keyboard: true
+        };
+
+    }
+
+    await fetch(url, {
+
+        method: "POST",
+
+        headers: {
+            "Content-Type": "application/json"
+        },
+
+        body: JSON.stringify(body)
+
+    });
+}
+
+// ===============================
+// REMOVE KEYBOARD
+// ===============================
+
+async function removeKeyboard(chatId, text) {
 
     const url =
         `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
 
     await fetch(url, {
+
         method: "POST",
 
         headers: {
@@ -47,9 +85,17 @@ async function sendMessage(chatId, text) {
         },
 
         body: JSON.stringify({
+
             chat_id: chatId,
-            text: text
+
+            text: text,
+
+            reply_markup: {
+                remove_keyboard: true
+            }
+
         })
+
     });
 }
 
@@ -59,7 +105,8 @@ async function sendMessage(chatId, text) {
 
 async function addPassenger(values) {
 
-    const authClient = await googleAuth.getClient();
+    const authClient =
+        await googleAuth.getClient();
 
     const sheets = google.sheets({
         version: "v4",
@@ -67,16 +114,20 @@ async function addPassenger(values) {
     });
 
     // Получаем информацию о таблице
-    const spreadsheet = await sheets.spreadsheets.get({
-        spreadsheetId: SPREADSHEET_ID
-    });
+    const spreadsheet =
+        await sheets.spreadsheets.get({
+            spreadsheetId: SPREADSHEET_ID
+        });
 
-    const firstSheet = spreadsheet.data.sheets[0];
+    const firstSheet =
+        spreadsheet.data.sheets[0];
 
     if (!firstSheet) {
+
         throw new Error(
             "В Google Таблице не найден ни один лист"
         );
+
     }
 
     const sheetTitle =
@@ -87,7 +138,7 @@ async function addPassenger(values) {
         sheetTitle
     );
 
-    // Записываем данные в первый лист
+    // Записываем данные
     await sheets.spreadsheets.values.append({
 
         spreadsheetId: SPREADSHEET_ID,
@@ -99,6 +150,7 @@ async function addPassenger(values) {
         requestBody: {
             values: [values]
         }
+
     });
 
     console.log(
@@ -115,6 +167,7 @@ app.get("/", (req, res) => {
     res.send(
         "Shohin Airlines Bot работает"
     );
+
 });
 
 // ===============================
@@ -132,6 +185,7 @@ app.post("/telegram/webhook", async (req, res) => {
             return res
                 .status(200)
                 .send("OK");
+
         }
 
         const chatId =
@@ -139,11 +193,6 @@ app.post("/telegram/webhook", async (req, res) => {
 
         const text =
             update.message.text || "";
-
-        console.log(
-            "Telegram message:",
-            text
-        );
 
         // ===============================
         // START
@@ -153,9 +202,8 @@ app.post("/telegram/webhook", async (req, res) => {
 
             delete userStates[chatId];
 
-            await sendMessage(
+            await removeKeyboard(
                 chatId,
-
                 "✈️ Добро пожаловать в Shohin Airlines Bot!\n\n" +
 
                 "Система учета пассажиров Shohin Airlines.\n\n" +
@@ -170,6 +218,7 @@ app.post("/telegram/webhook", async (req, res) => {
             return res
                 .status(200)
                 .send("OK");
+
         }
 
         // ===============================
@@ -179,6 +228,7 @@ app.post("/telegram/webhook", async (req, res) => {
         if (text === "/help") {
 
             await sendMessage(
+
                 chatId,
 
                 "📋 Доступные команды:\n\n" +
@@ -186,11 +236,13 @@ app.post("/telegram/webhook", async (req, res) => {
                 "/add — добавить пассажира\n" +
 
                 "/help — помощь"
+
             );
 
             return res
                 .status(200)
                 .send("OK");
+
         }
 
         // ===============================
@@ -204,11 +256,11 @@ app.post("/telegram/webhook", async (req, res) => {
                 step: 1,
 
                 data: []
+
             };
 
-            await sendMessage(
+            await removeKeyboard(
                 chatId,
-
                 "➕ Добавление пассажира\n\n" +
 
                 "Шаг 1 из 11\n\n" +
@@ -219,6 +271,7 @@ app.post("/telegram/webhook", async (req, res) => {
             return res
                 .status(200)
                 .send("OK");
+
         }
 
         // ===============================
@@ -230,126 +283,458 @@ app.post("/telegram/webhook", async (req, res) => {
             const state =
                 userStates[chatId];
 
-            state.data.push(text);
-
-            const questions = [
-
-                "Введите имя пассажира:",
-
-                "Введите отчество пассажира:",
-
-                "Введите дату рождения:",
-
-                "Введите номер паспорта:",
-
-                "Введите гражданство:",
-
-                "Введите номер рейса:",
-
-                "Введите дату рейса:",
-
-                "Введите маршрут:",
-
-                "Введите количество багажа:",
-
-                "Введите статус пассажира:"
-
-            ];
-
             // ===============================
-            // NEXT QUESTION
+            // STEP 1 — SURNAME
             // ===============================
 
-            if (state.step < 11) {
+            if (state.step === 1) {
 
-                state.step++;
+                state.data.push(text);
+
+                state.step = 2;
 
                 await sendMessage(
+
                     chatId,
 
-                    `Шаг ${state.step} из 11\n\n` +
+                    "Шаг 2 из 11\n\n" +
 
-                    questions[state.step - 2]
+                    "Введите имя пассажира:"
+
                 );
 
                 return res
                     .status(200)
                     .send("OK");
+
             }
 
             // ===============================
-            // CREATE PASSENGER ID
+            // STEP 2 — NAME
             // ===============================
 
-            const passengerId =
-                Date.now();
+            if (state.step === 2) {
+
+                state.data.push(text);
+
+                state.step = 3;
+
+                await sendMessage(
+
+                    chatId,
+
+                    "Шаг 3 из 11\n\n" +
+
+                    "Введите отчество пассажира:"
+
+                );
+
+                return res
+                    .status(200)
+                    .send("OK");
+
+            }
 
             // ===============================
-            // CREATE ROW
+            // STEP 3 — PATRONYMIC
             // ===============================
 
-            const row = [
+            if (state.step === 3) {
 
-                passengerId,
+                state.data.push(text);
 
-                state.data[0],
+                state.step = 4;
 
-                state.data[1],
+                await sendMessage(
 
-                state.data[2],
+                    chatId,
 
-                state.data[3],
+                    "Шаг 4 из 11\n\n" +
 
-                state.data[4],
+                    "Введите дату рождения:"
 
-                state.data[5],
+                );
 
-                state.data[6],
+                return res
+                    .status(200)
+                    .send("OK");
 
-                state.data[7],
-
-                state.data[8],
-
-                state.data[9],
-
-                state.data[10]
-
-            ];
-
-            console.log(
-                "Добавляем пассажира с ID:",
-                passengerId
-            );
+            }
 
             // ===============================
-            // SAVE TO GOOGLE SHEETS
+            // STEP 4 — DATE OF BIRTH
             // ===============================
 
-            await addPassenger(row);
+            if (state.step === 4) {
+
+                state.data.push(text);
+
+                state.step = 5;
+
+                await sendMessage(
+
+                    chatId,
+
+                    "Шаг 5 из 11\n\n" +
+
+                    "Введите номер паспорта:"
+
+                );
+
+                return res
+                    .status(200)
+                    .send("OK");
+
+            }
 
             // ===============================
-            // CLEAR USER STATE
+            // STEP 5 — PASSPORT
             // ===============================
 
-            delete userStates[chatId];
+            if (state.step === 5) {
+
+                state.data.push(text);
+
+                state.step = 6;
+
+                await sendMessage(
+
+                    chatId,
+
+                    "Шаг 6 из 11\n\n" +
+
+                    "Введите гражданство:"
+
+                );
+
+                return res
+                    .status(200)
+                    .send("OK");
+
+            }
 
             // ===============================
-            // SUCCESS MESSAGE
+            // STEP 6 — CITIZENSHIP
             // ===============================
 
-            await sendMessage(
-                chatId,
+            if (state.step === 6) {
 
-                "✅ Пассажир успешно добавлен!\n\n" +
+                state.data.push(text);
 
-                `ID пассажира: ${passengerId}\n\n` +
+                state.step = 7;
 
-                "Данные сохранены в Google Таблицу."
-            );
+                await sendMessage(
 
-            return res
-                .status(200)
-                .send("OK");
+                    chatId,
+
+                    "Шаг 7 из 11\n\n" +
+
+                    "Введите номер рейса:"
+
+                );
+
+                return res
+                    .status(200)
+                    .send("OK");
+
+            }
+
+            // ===============================
+            // STEP 7 — FLIGHT NUMBER
+            // ===============================
+
+            if (state.step === 7) {
+
+                state.data.push(text);
+
+                state.step = 8;
+
+                await sendMessage(
+
+                    chatId,
+
+                    "Шаг 8 из 11\n\n" +
+
+                    "Выберите маршрут:",
+
+                    [
+
+                        [
+                            "✈️ ДШБ — ХРГ",
+                            "✈️ ХРГ — ДШБ"
+                        ]
+
+                    ]
+
+                );
+
+                return res
+                    .status(200)
+                    .send("OK");
+
+            }
+
+            // ===============================
+            // STEP 8 — ROUTE
+            // ===============================
+
+            if (state.step === 8) {
+
+                const routes = [
+
+                    "✈️ ДШБ — ХРГ",
+                    "✈️ ХРГ — ДШБ"
+
+                ];
+
+                if (!routes.includes(text)) {
+
+                    await sendMessage(
+
+                        chatId,
+
+                        "❗ Пожалуйста, выберите маршрут с помощью кнопки."
+
+                    );
+
+                    return res
+                        .status(200)
+                        .send("OK");
+
+                }
+
+                state.data.push(text);
+
+                state.step = 9;
+
+                await sendMessage(
+
+                    chatId,
+
+                    "Шаг 9 из 11\n\n" +
+
+                    "Введите дату рейса:"
+
+                );
+
+                return res
+                    .status(200)
+                    .send("OK");
+
+            }
+
+            // ===============================
+            // STEP 9 — FLIGHT DATE
+            // ===============================
+
+            if (state.step === 9) {
+
+                state.data.push(text);
+
+                state.step = 10;
+
+                await sendMessage(
+
+                    chatId,
+
+                    "Шаг 10 из 11\n\n" +
+
+                    "Выберите количество багажа:",
+
+                    [
+
+                        [
+                            "0 мест"
+                        ],
+
+                        [
+                            "1 место",
+                            "2 места"
+                        ],
+
+                        [
+                            "3 места",
+                            "4 места"
+                        ]
+
+                    ]
+
+                );
+
+                return res
+                    .status(200)
+                    .send("OK");
+
+            }
+
+            // ===============================
+            // STEP 10 — BAGGAGE
+            // ===============================
+
+            if (state.step === 10) {
+
+                const baggageOptions = [
+
+                    "0 мест",
+                    "1 место",
+                    "2 места",
+                    "3 места",
+                    "4 места"
+
+                ];
+
+                if (!baggageOptions.includes(text)) {
+
+                    await sendMessage(
+
+                        chatId,
+
+                        "❗ Пожалуйста, выберите количество багажа с помощью кнопки."
+
+                    );
+
+                    return res
+                        .status(200)
+                        .send("OK");
+
+                }
+
+                state.data.push(text);
+
+                state.step = 11;
+
+                await sendMessage(
+
+                    chatId,
+
+                    "Шаг 11 из 11\n\n" +
+
+                    "Выберите статус пассажира:",
+
+                    [
+
+                        [
+                            "✅ Подтвержден"
+                        ],
+
+                        [
+                            "⏳ Ожидание"
+                        ],
+
+                        [
+                            "❌ Отменен"
+                        ]
+
+                    ]
+
+                );
+
+                return res
+                    .status(200)
+                    .send("OK");
+
+            }
+
+            // ===============================
+            // STEP 11 — STATUS
+            // ===============================
+
+            if (state.step === 11) {
+
+                const statusOptions = [
+
+                    "✅ Подтвержден",
+                    "⏳ Ожидание",
+                    "❌ Отменен"
+
+                ];
+
+                if (!statusOptions.includes(text)) {
+
+                    await sendMessage(
+
+                        chatId,
+
+                        "❗ Пожалуйста, выберите статус с помощью кнопки."
+
+                    );
+
+                    return res
+                        .status(200)
+                        .send("OK");
+
+                }
+
+                state.data.push(text);
+
+                // ===============================
+                // CREATE PASSENGER ID
+                // ===============================
+
+                const passengerId =
+                    Date.now();
+
+                // ===============================
+                // CREATE ROW
+                // ===============================
+
+                const row = [
+
+                    passengerId,
+
+                    state.data[0], // Фамилия
+                    state.data[1], // Имя
+                    state.data[2], // Отчество
+                    state.data[3], // Дата рождения
+                    state.data[4], // Паспорт
+                    state.data[5], // Гражданство
+                    state.data[6], // Рейс
+                    state.data[7], // Дата рейса
+                    state.data[8], // Маршрут
+                    state.data[9], // Багаж
+                    state.data[10] // Статус
+
+                ];
+
+                console.log(
+                    "Добавляем пассажира с ID:",
+                    passengerId
+                );
+
+                // ===============================
+                // SAVE TO GOOGLE SHEETS
+                // ===============================
+
+                await addPassenger(row);
+
+                // ===============================
+                // CLEAR USER STATE
+                // ===============================
+
+                delete userStates[chatId];
+
+                // ===============================
+                // SUCCESS
+                // ===============================
+
+                await removeKeyboard(
+
+                    chatId,
+
+                    "✅ Пассажир успешно добавлен!\n\n" +
+
+                    `ID пассажира: ${passengerId}\n\n` +
+
+                    "Данные сохранены в Google Таблицу."
+
+                );
+
+                return res
+                    .status(200)
+                    .send("OK");
+
+            }
+
         }
 
         // ===============================
@@ -357,11 +742,13 @@ app.post("/telegram/webhook", async (req, res) => {
         // ===============================
 
         await sendMessage(
+
             chatId,
 
             "❓ Неизвестная команда.\n\n" +
 
             "Используйте /help."
+
         );
 
         return res
@@ -375,15 +762,12 @@ app.post("/telegram/webhook", async (req, res) => {
             error.message
         );
 
-        console.error(
-            "FULL ERROR:",
-            error
-        );
-
         return res
             .status(200)
             .send("OK");
+
     }
+
 });
 
 // ===============================
