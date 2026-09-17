@@ -1,0 +1,13 @@
+{
+  "name": "kmrn-passenger-bot",
+  "version": "1.0.0",
+  "description": "KMRN Passenger Accounting Telegram Bot",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "googleapis": "^144.0.0"
+  }
+}
