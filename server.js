@@ -31,6 +31,9 @@ const googleAuth = new google.auth.GoogleAuth({
 
 const userStates = {};
 
+// Последний добавленный пассажир
+const lastPassengers = {};
+
 
 // =====================================
 // SEND TELEGRAM MESSAGE
@@ -46,13 +49,12 @@ async function sendMessage(chatId, text, keyboard = null) {
         text: text
     };
 
-    // Если передана клавиатура
     if (keyboard) {
 
         body.reply_markup = {
             keyboard: keyboard,
             resize_keyboard: true,
-            one_time_keyboard: true
+            one_time_keyboard: false
         };
 
     }
@@ -105,6 +107,76 @@ async function removeKeyboard(chatId, text) {
 
 
 // =====================================
+// MAIN MENU
+// =====================================
+
+async function showMainMenu(chatId) {
+
+    await sendMessage(
+
+        chatId,
+
+        "🏠 Главное меню\n\n" +
+
+        "Выберите необходимое действие:",
+
+        [
+
+            [
+                "➕ Добавить пассажира"
+            ],
+
+            [
+                "👤 Посмотреть данные"
+            ],
+
+            [
+                "🔎 Найти пассажира"
+            ],
+
+            [
+                "✈️ Пассажиры рейса"
+            ],
+
+            [
+                "📊 Статистика"
+            ]
+
+        ]
+
+    );
+}
+
+
+// =====================================
+// START ADD PASSENGER
+// =====================================
+
+async function startAddPassenger(chatId) {
+
+    userStates[chatId] = {
+
+        step: 1,
+
+        data: []
+
+    };
+
+    await removeKeyboard(
+
+        chatId,
+
+        "➕ Добавление пассажира\n\n" +
+
+        "Шаг 1 из 11\n\n" +
+
+        "Введите фамилию пассажира:"
+
+    );
+}
+
+
+// =====================================
 // ADD PASSENGER TO GOOGLE SHEETS
 // =====================================
 
@@ -114,8 +186,11 @@ async function addPassenger(values) {
         await googleAuth.getClient();
 
     const sheets = google.sheets({
+
         version: "v4",
+
         auth: authClient
+
     });
 
     // Получаем информацию о таблице
@@ -214,28 +289,14 @@ app.post("/telegram/webhook", async (req, res) => {
 
         if (text === "/start") {
 
-            // Сбрасываем предыдущую регистрацию
             delete userStates[chatId];
 
-            await removeKeyboard(
-
-                chatId,
-
-                "✈️ Добро пожаловать в Shohin Airlines Bot!\n\n" +
-
-                "Система учета пассажиров Shohin Airlines.\n\n" +
-
-                "Доступные команды:\n\n" +
-
-                "/add — добавить пассажира\n" +
-
-                "/help — помощь"
-
-            );
+            await showMainMenu(chatId);
 
             return res
                 .status(200)
                 .send("OK");
+
         }
 
 
@@ -245,57 +306,216 @@ app.post("/telegram/webhook", async (req, res) => {
 
         if (text === "/help") {
 
-            // На всякий случай убираем клавиатуру
-            await removeKeyboard(
+            delete userStates[chatId];
+
+            await sendMessage(
 
                 chatId,
 
-                "📋 Доступные команды:\n\n" +
+                "📋 Помощь\n\n" +
 
-                "/add — добавить пассажира\n" +
+                "➕ Добавить пассажира — регистрация нового пассажира.\n\n" +
 
-                "/help — помощь"
+                "👤 Посмотреть данные — просмотр последнего добавленного пассажира.\n\n" +
+
+                "🔎 Найти пассажира — поиск пассажира.\n\n" +
+
+                "✈️ Пассажиры рейса — список пассажиров рейса.\n\n" +
+
+                "📊 Статистика — статистика пассажиров."
 
             );
+
+            await showMainMenu(chatId);
 
             return res
                 .status(200)
                 .send("OK");
+
         }
 
 
 // =====================================
-// ADD PASSENGER
+// ADD PASSENGER BUTTON
 // =====================================
 
-        if (text === "/add") {
+        if (
+            text === "➕ Добавить пассажира" ||
+            text === "/add"
+        ) {
 
-            userStates[chatId] = {
+            await startAddPassenger(chatId);
 
-                step: 1,
+            return res
+                .status(200)
+                .send("OK");
 
-                data: []
+        }
 
-            };
 
-            // Обычный ввод.
-            // Клавиатура полностью убирается.
+// =====================================
+// MAIN MENU BUTTON
+// =====================================
+
+        if (text === "🏠 Главное меню") {
+
+            delete userStates[chatId];
+
+            await showMainMenu(chatId);
+
+            return res
+                .status(200)
+                .send("OK");
+
+        }
+
+
+// =====================================
+// VIEW LAST PASSENGER
+// =====================================
+
+        if (text === "👤 Посмотреть данные") {
+
+            const passenger =
+                lastPassengers[chatId];
+
+            if (!passenger) {
+
+                await sendMessage(
+
+                    chatId,
+
+                    "ℹ️ В этой сессии ещё не добавлен пассажир."
+
+                );
+
+                await showMainMenu(chatId);
+
+                return res
+                    .status(200)
+                    .send("OK");
+
+            }
+
+            await sendMessage(
+
+                chatId,
+
+                "👤 Последний добавленный пассажир\n\n" +
+
+                `🆔 ID: ${passenger.id}\n` +
+
+                `👤 Фамилия: ${passenger.surname}\n` +
+
+                `👤 Имя: ${passenger.name}\n` +
+
+                `👤 Отчество: ${passenger.patronymic}\n` +
+
+                `🎂 Дата рождения: ${passenger.birthDate}\n` +
+
+                `🛂 Паспорт: ${passenger.passport}\n` +
+
+                `🌍 Гражданство: ${passenger.citizenship}\n` +
+
+                `✈️ Рейс: ${passenger.flight}\n` +
+
+                `📅 Дата рейса: ${passenger.flightDate}\n` +
+
+                `🗺 Маршрут: ${passenger.route}\n` +
+
+                `🧳 Багаж: ${passenger.baggage}\n` +
+
+                `📋 Статус: ${passenger.status}`
+
+            );
+
+            await showMainMenu(chatId);
+
+            return res
+                .status(200)
+                .send("OK");
+
+        }
+
+
+// =====================================
+// FIND PASSENGER
+// =====================================
+
+        if (text === "🔎 Найти пассажира") {
+
+            delete userStates[chatId];
 
             await removeKeyboard(
 
                 chatId,
 
-                "➕ Добавление пассажира\n\n" +
+                "🔎 Поиск пассажира\n\n" +
 
-                "Шаг 1 из 11\n\n" +
-
-                "Введите фамилию пассажира:"
+                "Эта функция будет подключена следующим этапом."
 
             );
+
+            await showMainMenu(chatId);
 
             return res
                 .status(200)
                 .send("OK");
+
+        }
+
+
+// =====================================
+// PASSENGERS BY FLIGHT
+// =====================================
+
+        if (text === "✈️ Пассажиры рейса") {
+
+            delete userStates[chatId];
+
+            await removeKeyboard(
+
+                chatId,
+
+                "✈️ Пассажиры рейса\n\n" +
+
+                "Эта функция будет подключена следующим этапом."
+
+            );
+
+            await showMainMenu(chatId);
+
+            return res
+                .status(200)
+                .send("OK");
+
+        }
+
+
+// =====================================
+// STATISTICS
+// =====================================
+
+        if (text === "📊 Статистика") {
+
+            delete userStates[chatId];
+
+            await removeKeyboard(
+
+                chatId,
+
+                "📊 Статистика\n\n" +
+
+                "Эта функция будет подключена следующим этапом."
+
+            );
+
+            await showMainMenu(chatId);
+
+            return res
+                .status(200)
+                .send("OK");
+
         }
 
 
@@ -332,6 +552,7 @@ app.post("/telegram/webhook", async (req, res) => {
                 return res
                     .status(200)
                     .send("OK");
+
             }
 
 
@@ -358,6 +579,7 @@ app.post("/telegram/webhook", async (req, res) => {
                 return res
                     .status(200)
                     .send("OK");
+
             }
 
 
@@ -384,6 +606,7 @@ app.post("/telegram/webhook", async (req, res) => {
                 return res
                     .status(200)
                     .send("OK");
+
             }
 
 
@@ -410,6 +633,7 @@ app.post("/telegram/webhook", async (req, res) => {
                 return res
                     .status(200)
                     .send("OK");
+
             }
 
 
@@ -436,6 +660,7 @@ app.post("/telegram/webhook", async (req, res) => {
                 return res
                     .status(200)
                     .send("OK");
+
             }
 
 
@@ -462,6 +687,7 @@ app.post("/telegram/webhook", async (req, res) => {
                 return res
                     .status(200)
                     .send("OK");
+
             }
 
 
@@ -474,10 +700,6 @@ app.post("/telegram/webhook", async (req, res) => {
                 state.data.push(text);
 
                 state.step = 8;
-
-                // =================================
-                // ЗДЕСЬ ПОЯВЛЯЮТСЯ КНОПКИ
-                // =================================
 
                 await sendMessage(
 
@@ -501,6 +723,7 @@ app.post("/telegram/webhook", async (req, res) => {
                 return res
                     .status(200)
                     .send("OK");
+
             }
 
 
@@ -517,10 +740,6 @@ app.post("/telegram/webhook", async (req, res) => {
 
                 ];
 
-                // =================================
-                // ЗАПРЕЩАЕМ РУЧНОЙ ВВОД
-                // =================================
-
                 if (!routes.includes(text)) {
 
                     await sendMessage(
@@ -534,16 +753,12 @@ app.post("/telegram/webhook", async (req, res) => {
                     return res
                         .status(200)
                         .send("OK");
+
                 }
 
-                // Сохраняем маршрут
                 state.data.push(text);
 
                 state.step = 9;
-
-                // =================================
-                // КЛАВИАТУРА УБИРАЕТСЯ
-                // =================================
 
                 await removeKeyboard(
 
@@ -558,6 +773,7 @@ app.post("/telegram/webhook", async (req, res) => {
                 return res
                     .status(200)
                     .send("OK");
+
             }
 
 
@@ -570,10 +786,6 @@ app.post("/telegram/webhook", async (req, res) => {
                 state.data.push(text);
 
                 state.step = 10;
-
-                // =================================
-                // ПОКАЗЫВАЕМ КНОПКИ БАГАЖА
-                // =================================
 
                 await sendMessage(
 
@@ -606,6 +818,7 @@ app.post("/telegram/webhook", async (req, res) => {
                 return res
                     .status(200)
                     .send("OK");
+
             }
 
 
@@ -625,10 +838,6 @@ app.post("/telegram/webhook", async (req, res) => {
 
                 ];
 
-                // =================================
-                // ЗАПРЕЩАЕМ РУЧНОЙ ВВОД
-                // =================================
-
                 if (!baggageOptions.includes(text)) {
 
                     await sendMessage(
@@ -642,17 +851,12 @@ app.post("/telegram/webhook", async (req, res) => {
                     return res
                         .status(200)
                         .send("OK");
+
                 }
 
-                // Сохраняем багаж
                 state.data.push(text);
 
                 state.step = 11;
-
-                // =================================
-                // КЛАВИАТУРА ОСТАЁТСЯ ТОЛЬКО
-                // ДЛЯ ВЫБОРА СТАТУСА
-                // =================================
 
                 await sendMessage(
 
@@ -683,6 +887,7 @@ app.post("/telegram/webhook", async (req, res) => {
                 return res
                     .status(200)
                     .send("OK");
+
             }
 
 
@@ -700,10 +905,6 @@ app.post("/telegram/webhook", async (req, res) => {
 
                 ];
 
-                // =================================
-                // ЗАПРЕЩАЕМ РУЧНОЙ ВВОД
-                // =================================
-
                 if (!statusOptions.includes(text)) {
 
                     await sendMessage(
@@ -717,9 +918,9 @@ app.post("/telegram/webhook", async (req, res) => {
                     return res
                         .status(200)
                         .send("OK");
+
                 }
 
-                // Сохраняем статус
                 state.data.push(text);
 
 
@@ -734,8 +935,6 @@ app.post("/telegram/webhook", async (req, res) => {
 // =====================================
 // CREATE ROW
 // =====================================
-//
-// Google Sheets:
 //
 // A = ID
 // B = Фамилия
@@ -781,25 +980,76 @@ app.post("/telegram/webhook", async (req, res) => {
 
 
 // =====================================
-// CLEAR USER STATE
+// SAVE LAST PASSENGER
+// =====================================
+
+                lastPassengers[chatId] = {
+
+                    id: passengerId,
+
+                    surname: state.data[0],
+
+                    name: state.data[1],
+
+                    patronymic: state.data[2],
+
+                    birthDate: state.data[3],
+
+                    passport: state.data[4],
+
+                    citizenship: state.data[5],
+
+                    flight: state.data[6],
+
+                    route: state.data[7],
+
+                    flightDate: state.data[8],
+
+                    baggage: state.data[9],
+
+                    status: state.data[10]
+
+                };
+
+
+// =====================================
+// CLEAR REGISTRATION
 // =====================================
 
                 delete userStates[chatId];
 
 
 // =====================================
-// SUCCESS
+// SUCCESS + ACTION MENU
 // =====================================
 
-                await removeKeyboard(
+                await sendMessage(
 
                     chatId,
 
                     "✅ Пассажир успешно добавлен!\n\n" +
 
-                    `ID пассажира: ${passengerId}\n\n` +
+                    `🆔 ID пассажира: ${passengerId}\n\n` +
 
-                    "Данные сохранены в Google Таблицу."
+                    "Данные сохранены в Google Таблицу.\n\n" +
+
+                    "Выберите следующее действие:",
+
+                    [
+
+                        [
+                            "➕ Добавить ещё одного"
+                        ],
+
+                        [
+                            "👤 Посмотреть данные"
+                        ],
+
+                        [
+                            "🏠 Главное меню"
+                        ]
+
+                    ]
 
                 );
 
@@ -813,18 +1063,35 @@ app.post("/telegram/webhook", async (req, res) => {
 
 
 // =====================================
+// ADD ANOTHER PASSENGER
+// =====================================
+
+        if (text === "➕ Добавить ещё одного") {
+
+            await startAddPassenger(chatId);
+
+            return res
+                .status(200)
+                .send("OK");
+
+        }
+
+
+// =====================================
 // UNKNOWN COMMAND
 // =====================================
 
-        await removeKeyboard(
+        await sendMessage(
 
             chatId,
 
             "❓ Неизвестная команда.\n\n" +
 
-            "Используйте /help."
+            "Пожалуйста, выберите действие из меню."
 
         );
+
+        await showMainMenu(chatId);
 
         return res
             .status(200)
