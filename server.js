@@ -10,29 +10,31 @@ const PORT = process.env.PORT || 3000;
 const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const SPREADSHEET_ID = process.env.GOOGLE_SHEET_ID;
 
-// ===============================
+// =====================================
 // GOOGLE AUTHENTICATION
-// ===============================
+// =====================================
 
 const googleAuth = new google.auth.GoogleAuth({
     credentials: {
         client_email: process.env.GOOGLE_CLIENT_EMAIL,
         private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, "\n")
     },
+
     scopes: [
         "https://www.googleapis.com/auth/spreadsheets"
     ]
 });
 
-// ===============================
+// =====================================
 // USER STATES
-// ===============================
+// =====================================
 
 const userStates = {};
 
-// ===============================
-// TELEGRAM SEND MESSAGE
-// ===============================
+
+// =====================================
+// SEND TELEGRAM MESSAGE
+// =====================================
 
 async function sendMessage(chatId, text, keyboard = null) {
 
@@ -44,6 +46,7 @@ async function sendMessage(chatId, text, keyboard = null) {
         text: text
     };
 
+    // Если передана клавиатура
     if (keyboard) {
 
         body.reply_markup = {
@@ -67,9 +70,10 @@ async function sendMessage(chatId, text, keyboard = null) {
     });
 }
 
-// ===============================
+
+// =====================================
 // REMOVE KEYBOARD
-// ===============================
+// =====================================
 
 async function removeKeyboard(chatId, text) {
 
@@ -99,9 +103,10 @@ async function removeKeyboard(chatId, text) {
     });
 }
 
-// ===============================
+
+// =====================================
 // ADD PASSENGER TO GOOGLE SHEETS
-// ===============================
+// =====================================
 
 async function addPassenger(values) {
 
@@ -116,9 +121,12 @@ async function addPassenger(values) {
     // Получаем информацию о таблице
     const spreadsheet =
         await sheets.spreadsheets.get({
+
             spreadsheetId: SPREADSHEET_ID
+
         });
 
+    // Берём первый лист
     const firstSheet =
         spreadsheet.data.sheets[0];
 
@@ -138,7 +146,7 @@ async function addPassenger(values) {
         sheetTitle
     );
 
-    // Записываем данные
+    // Записываем пассажира
     await sheets.spreadsheets.values.append({
 
         spreadsheetId: SPREADSHEET_ID,
@@ -148,7 +156,9 @@ async function addPassenger(values) {
         valueInputOption: "USER_ENTERED",
 
         requestBody: {
+
             values: [values]
+
         }
 
     });
@@ -158,9 +168,10 @@ async function addPassenger(values) {
     );
 }
 
-// ===============================
+
+// =====================================
 // MAIN PAGE
-// ===============================
+// =====================================
 
 app.get("/", (req, res) => {
 
@@ -170,9 +181,10 @@ app.get("/", (req, res) => {
 
 });
 
-// ===============================
+
+// =====================================
 // TELEGRAM WEBHOOK
-// ===============================
+// =====================================
 
 app.post("/telegram/webhook", async (req, res) => {
 
@@ -180,6 +192,7 @@ app.post("/telegram/webhook", async (req, res) => {
 
         const update = req.body;
 
+        // Если Telegram прислал не сообщение
         if (!update.message) {
 
             return res
@@ -194,12 +207,14 @@ app.post("/telegram/webhook", async (req, res) => {
         const text =
             update.message.text || "";
 
-        // ===============================
-        // START
-        // ===============================
+
+// =====================================
+// START
+// =====================================
 
         if (text === "/start") {
 
+            // Сбрасываем предыдущую регистрацию
             delete userStates[chatId];
 
             await removeKeyboard(
@@ -221,16 +236,17 @@ app.post("/telegram/webhook", async (req, res) => {
             return res
                 .status(200)
                 .send("OK");
-
         }
 
-        // ===============================
-        // HELP
-        // ===============================
+
+// =====================================
+// HELP
+// =====================================
 
         if (text === "/help") {
 
-            await sendMessage(
+            // На всякий случай убираем клавиатуру
+            await removeKeyboard(
 
                 chatId,
 
@@ -245,12 +261,12 @@ app.post("/telegram/webhook", async (req, res) => {
             return res
                 .status(200)
                 .send("OK");
-
         }
 
-        // ===============================
-        // ADD PASSENGER
-        // ===============================
+
+// =====================================
+// ADD PASSENGER
+// =====================================
 
         if (text === "/add") {
 
@@ -261,6 +277,9 @@ app.post("/telegram/webhook", async (req, res) => {
                 data: []
 
             };
+
+            // Обычный ввод.
+            // Клавиатура полностью убирается.
 
             await removeKeyboard(
 
@@ -277,21 +296,22 @@ app.post("/telegram/webhook", async (req, res) => {
             return res
                 .status(200)
                 .send("OK");
-
         }
 
-        // ===============================
-        // PASSENGER DATA
-        // ===============================
+
+// =====================================
+// PASSENGER REGISTRATION
+// =====================================
 
         if (userStates[chatId]) {
 
             const state =
                 userStates[chatId];
 
-            // ===============================
-            // STEP 1 — SURNAME
-            // ===============================
+
+// =====================================
+// STEP 1 — SURNAME
+// =====================================
 
             if (state.step === 1) {
 
@@ -299,7 +319,7 @@ app.post("/telegram/webhook", async (req, res) => {
 
                 state.step = 2;
 
-                await sendMessage(
+                await removeKeyboard(
 
                     chatId,
 
@@ -312,12 +332,12 @@ app.post("/telegram/webhook", async (req, res) => {
                 return res
                     .status(200)
                     .send("OK");
-
             }
 
-            // ===============================
-            // STEP 2 — NAME
-            // ===============================
+
+// =====================================
+// STEP 2 — NAME
+// =====================================
 
             if (state.step === 2) {
 
@@ -325,7 +345,7 @@ app.post("/telegram/webhook", async (req, res) => {
 
                 state.step = 3;
 
-                await sendMessage(
+                await removeKeyboard(
 
                     chatId,
 
@@ -338,12 +358,12 @@ app.post("/telegram/webhook", async (req, res) => {
                 return res
                     .status(200)
                     .send("OK");
-
             }
 
-            // ===============================
-            // STEP 3 — PATRONYMIC
-            // ===============================
+
+// =====================================
+// STEP 3 — PATRONYMIC
+// =====================================
 
             if (state.step === 3) {
 
@@ -351,7 +371,7 @@ app.post("/telegram/webhook", async (req, res) => {
 
                 state.step = 4;
 
-                await sendMessage(
+                await removeKeyboard(
 
                     chatId,
 
@@ -364,12 +384,12 @@ app.post("/telegram/webhook", async (req, res) => {
                 return res
                     .status(200)
                     .send("OK");
-
             }
 
-            // ===============================
-            // STEP 4 — DATE OF BIRTH
-            // ===============================
+
+// =====================================
+// STEP 4 — DATE OF BIRTH
+// =====================================
 
             if (state.step === 4) {
 
@@ -377,7 +397,7 @@ app.post("/telegram/webhook", async (req, res) => {
 
                 state.step = 5;
 
-                await sendMessage(
+                await removeKeyboard(
 
                     chatId,
 
@@ -390,12 +410,12 @@ app.post("/telegram/webhook", async (req, res) => {
                 return res
                     .status(200)
                     .send("OK");
-
             }
 
-            // ===============================
-            // STEP 5 — PASSPORT
-            // ===============================
+
+// =====================================
+// STEP 5 — PASSPORT
+// =====================================
 
             if (state.step === 5) {
 
@@ -403,7 +423,7 @@ app.post("/telegram/webhook", async (req, res) => {
 
                 state.step = 6;
 
-                await sendMessage(
+                await removeKeyboard(
 
                     chatId,
 
@@ -416,12 +436,12 @@ app.post("/telegram/webhook", async (req, res) => {
                 return res
                     .status(200)
                     .send("OK");
-
             }
 
-            // ===============================
-            // STEP 6 — CITIZENSHIP
-            // ===============================
+
+// =====================================
+// STEP 6 — CITIZENSHIP
+// =====================================
 
             if (state.step === 6) {
 
@@ -429,7 +449,7 @@ app.post("/telegram/webhook", async (req, res) => {
 
                 state.step = 7;
 
-                await sendMessage(
+                await removeKeyboard(
 
                     chatId,
 
@@ -442,12 +462,12 @@ app.post("/telegram/webhook", async (req, res) => {
                 return res
                     .status(200)
                     .send("OK");
-
             }
 
-            // ===============================
-            // STEP 7 — FLIGHT NUMBER
-            // ===============================
+
+// =====================================
+// STEP 7 — FLIGHT NUMBER
+// =====================================
 
             if (state.step === 7) {
 
@@ -455,13 +475,17 @@ app.post("/telegram/webhook", async (req, res) => {
 
                 state.step = 8;
 
+                // =================================
+                // ЗДЕСЬ ПОЯВЛЯЮТСЯ КНОПКИ
+                // =================================
+
                 await sendMessage(
 
                     chatId,
 
                     "Шаг 8 из 11\n\n" +
 
-                    "Выберите маршрут:",
+                    "✈️ Выберите маршрут:",
 
                     [
 
@@ -477,12 +501,12 @@ app.post("/telegram/webhook", async (req, res) => {
                 return res
                     .status(200)
                     .send("OK");
-
             }
 
-            // ===============================
-            // STEP 8 — ROUTE
-            // ===============================
+
+// =====================================
+// STEP 8 — ROUTE
+// =====================================
 
             if (state.step === 8) {
 
@@ -492,6 +516,10 @@ app.post("/telegram/webhook", async (req, res) => {
                     "✈️ ХРГ — ДШБ"
 
                 ];
+
+                // =================================
+                // ЗАПРЕЩАЕМ РУЧНОЙ ВВОД
+                // =================================
 
                 if (!routes.includes(text)) {
 
@@ -506,14 +534,18 @@ app.post("/telegram/webhook", async (req, res) => {
                     return res
                         .status(200)
                         .send("OK");
-
                 }
 
+                // Сохраняем маршрут
                 state.data.push(text);
 
                 state.step = 9;
 
-                await sendMessage(
+                // =================================
+                // КЛАВИАТУРА УБИРАЕТСЯ
+                // =================================
+
+                await removeKeyboard(
 
                     chatId,
 
@@ -526,12 +558,12 @@ app.post("/telegram/webhook", async (req, res) => {
                 return res
                     .status(200)
                     .send("OK");
-
             }
 
-            // ===============================
-            // STEP 9 — FLIGHT DATE
-            // ===============================
+
+// =====================================
+// STEP 9 — FLIGHT DATE
+// =====================================
 
             if (state.step === 9) {
 
@@ -539,13 +571,17 @@ app.post("/telegram/webhook", async (req, res) => {
 
                 state.step = 10;
 
+                // =================================
+                // ПОКАЗЫВАЕМ КНОПКИ БАГАЖА
+                // =================================
+
                 await sendMessage(
 
                     chatId,
 
                     "Шаг 10 из 11\n\n" +
 
-                    "Выберите количество багажа:",
+                    "🧳 Выберите количество багажа:",
 
                     [
 
@@ -570,12 +606,12 @@ app.post("/telegram/webhook", async (req, res) => {
                 return res
                     .status(200)
                     .send("OK");
-
             }
 
-            // ===============================
-            // STEP 10 — BAGGAGE
-            // ===============================
+
+// =====================================
+// STEP 10 — BAGGAGE
+// =====================================
 
             if (state.step === 10) {
 
@@ -588,6 +624,10 @@ app.post("/telegram/webhook", async (req, res) => {
                     "4 места"
 
                 ];
+
+                // =================================
+                // ЗАПРЕЩАЕМ РУЧНОЙ ВВОД
+                // =================================
 
                 if (!baggageOptions.includes(text)) {
 
@@ -602,12 +642,17 @@ app.post("/telegram/webhook", async (req, res) => {
                     return res
                         .status(200)
                         .send("OK");
-
                 }
 
+                // Сохраняем багаж
                 state.data.push(text);
 
                 state.step = 11;
+
+                // =================================
+                // КЛАВИАТУРА ОСТАЁТСЯ ТОЛЬКО
+                // ДЛЯ ВЫБОРА СТАТУСА
+                // =================================
 
                 await sendMessage(
 
@@ -615,7 +660,7 @@ app.post("/telegram/webhook", async (req, res) => {
 
                     "Шаг 11 из 11\n\n" +
 
-                    "Выберите статус пассажира:",
+                    "📋 Выберите статус пассажира:",
 
                     [
 
@@ -638,12 +683,12 @@ app.post("/telegram/webhook", async (req, res) => {
                 return res
                     .status(200)
                     .send("OK");
-
             }
 
-            // ===============================
-            // STEP 11 — STATUS
-            // ===============================
+
+// =====================================
+// STEP 11 — STATUS
+// =====================================
 
             if (state.step === 11) {
 
@@ -654,6 +699,10 @@ app.post("/telegram/webhook", async (req, res) => {
                     "❌ Отменен"
 
                 ];
+
+                // =================================
+                // ЗАПРЕЩАЕМ РУЧНОЙ ВВОД
+                // =================================
 
                 if (!statusOptions.includes(text)) {
 
@@ -668,41 +717,40 @@ app.post("/telegram/webhook", async (req, res) => {
                     return res
                         .status(200)
                         .send("OK");
-
                 }
 
+                // Сохраняем статус
                 state.data.push(text);
 
-                // ===============================
-                // CREATE PASSENGER ID
-                // ===============================
+
+// =====================================
+// CREATE PASSENGER ID
+// =====================================
 
                 const passengerId =
                     Date.now();
 
-                // ===============================
-                // CREATE ROW
-                // ===============================
-                //
-                // ВАЖНО:
-                //
-                // H = Рейс
-                // I = Дата рейса
-                // J = Маршрут
-                //
-                // Поэтому здесь:
-                //
-                // state.data[6] = Рейс
-                // state.data[7] = Маршрут
-                // state.data[8] = Дата рейса
-                //
-                // В Google Sheets записываем:
-                //
-                // H -> data[6]
-                // I -> data[8]
-                // J -> data[7]
-                //
-                // ===============================
+
+// =====================================
+// CREATE ROW
+// =====================================
+//
+// Google Sheets:
+//
+// A = ID
+// B = Фамилия
+// C = Имя
+// D = Отчество
+// E = Дата рождения
+// F = Паспорт
+// G = Гражданство
+// H = Рейс
+// I = Дата рейса
+// J = Маршрут
+// K = Багаж
+// L = Статус
+//
+// =====================================
 
                 const row = [
 
@@ -724,26 +772,24 @@ app.post("/telegram/webhook", async (req, res) => {
 
                 ];
 
-                console.log(
-                    "Добавляем пассажира с ID:",
-                    passengerId
-                );
 
-                // ===============================
-                // SAVE TO GOOGLE SHEETS
-                // ===============================
+// =====================================
+// SAVE TO GOOGLE SHEETS
+// =====================================
 
                 await addPassenger(row);
 
-                // ===============================
-                // CLEAR USER STATE
-                // ===============================
+
+// =====================================
+// CLEAR USER STATE
+// =====================================
 
                 delete userStates[chatId];
 
-                // ===============================
-                // SUCCESS MESSAGE
-                // ===============================
+
+// =====================================
+// SUCCESS
+// =====================================
 
                 await removeKeyboard(
 
@@ -765,11 +811,12 @@ app.post("/telegram/webhook", async (req, res) => {
 
         }
 
-        // ===============================
-        // UNKNOWN COMMAND
-        // ===============================
 
-        await sendMessage(
+// =====================================
+// UNKNOWN COMMAND
+// =====================================
+
+        await removeKeyboard(
 
             chatId,
 
@@ -782,6 +829,7 @@ app.post("/telegram/webhook", async (req, res) => {
         return res
             .status(200)
             .send("OK");
+
 
     } catch (error) {
 
@@ -798,9 +846,10 @@ app.post("/telegram/webhook", async (req, res) => {
 
 });
 
-// ===============================
+
+// =====================================
 // START SERVER
-// ===============================
+// =====================================
 
 app.listen(PORT, () => {
 
