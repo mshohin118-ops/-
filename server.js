@@ -77,6 +77,41 @@ async function sendMessage(chatId, text, keyboard = null) {
 
 
 // =====================================
+// SEND INLINE BUTTONS
+// =====================================
+
+async function sendInlineMessage(chatId, text, buttons) {
+
+    const url =
+        `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
+
+    const body = {
+
+        chat_id: chatId,
+
+        text: text,
+
+        reply_markup: {
+            inline_keyboard: buttons
+        }
+
+    };
+
+    await fetch(url, {
+
+        method: "POST",
+
+        headers: {
+            "Content-Type": "application/json"
+        },
+
+        body: JSON.stringify(body)
+
+    });
+}
+
+
+// =====================================
 // REMOVE KEYBOARD
 // =====================================
 
@@ -101,6 +136,66 @@ async function removeKeyboard(chatId, text) {
 
             reply_markup: {
                 remove_keyboard: true
+            }
+
+        })
+
+    });
+}
+
+
+// =====================================
+// ANSWER CALLBACK
+// =====================================
+
+async function answerCallbackQuery(callbackId) {
+
+    const url =
+        `https://api.telegram.org/bot${TELEGRAM_TOKEN}/answerCallbackQuery`;
+
+    await fetch(url, {
+
+        method: "POST",
+
+        headers: {
+            "Content-Type": "application/json"
+        },
+
+        body: JSON.stringify({
+
+            callback_query_id: callbackId
+
+        })
+
+    });
+}
+
+
+// =====================================
+// REMOVE INLINE BUTTONS
+// =====================================
+
+async function removeInlineButtons(chatId, messageId) {
+
+    const url =
+        `https://api.telegram.org/bot${TELEGRAM_TOKEN}/editMessageReplyMarkup`;
+
+    await fetch(url, {
+
+        method: "POST",
+
+        headers: {
+            "Content-Type": "application/json"
+        },
+
+        body: JSON.stringify({
+
+            chat_id: chatId,
+
+            message_id: messageId,
+
+            reply_markup: {
+                inline_keyboard: []
             }
 
         })
@@ -196,7 +291,6 @@ async function addPassenger(values) {
     });
 
 
-    // Получаем информацию о таблице
     const spreadsheet =
         await sheets.spreadsheets.get({
 
@@ -205,9 +299,9 @@ async function addPassenger(values) {
         });
 
 
-    // Берём первый лист
     const firstSheet =
         spreadsheet.data.sheets[0];
+
 
     if (!firstSheet) {
 
@@ -228,7 +322,6 @@ async function addPassenger(values) {
     );
 
 
-    // Записываем пассажира
     await sheets.spreadsheets.values.append({
 
         spreadsheetId: SPREADSHEET_ID,
@@ -276,7 +369,310 @@ app.post("/telegram/webhook", async (req, res) => {
         const update = req.body;
 
 
-        // Если Telegram прислал не сообщение
+// =====================================
+// CALLBACK QUERY — INLINE BUTTONS
+// =====================================
+
+        if (update.callback_query) {
+
+            const callback =
+                update.callback_query;
+
+            const chatId =
+                callback.message.chat.id;
+
+            const messageId =
+                callback.message.message_id;
+
+            const data =
+                callback.data;
+
+
+            const state =
+                userStates[chatId];
+
+
+            await answerCallbackQuery(
+                callback.id
+            );
+
+
+            if (!state) {
+
+                await removeInlineButtons(
+                    chatId,
+                    messageId
+                );
+
+                return res
+                    .status(200)
+                    .send("OK");
+
+            }
+
+
+// =====================================
+// ROUTE BUTTONS — STEP 8
+// =====================================
+
+            if (
+                state.step === 8 &&
+                (
+                    data === "route_dshb_khrg" ||
+                    data === "route_khrg_dshb"
+                )
+            ) {
+
+                let route = "";
+
+                if (data === "route_dshb_khrg") {
+
+                    route = "✈️ ДШБ — ХРГ";
+
+                }
+
+                if (data === "route_khrg_dshb") {
+
+                    route = "✈️ ХРГ — ДШБ";
+
+                }
+
+
+                state.data.push(route);
+
+                state.step = 9;
+
+
+                await removeInlineButtons(
+                    chatId,
+                    messageId
+                );
+
+
+                await sendInlineMessage(
+
+                    chatId,
+
+                    "Шаг 9 из 9\n\n" +
+                    "📋 Выберите статус пассажира:",
+
+                    [
+
+                        [
+                            {
+                                text: "✅ Подтвержден",
+                                callback_data: "status_confirmed"
+                            }
+                        ],
+
+                        [
+                            {
+                                text: "⏳ Ожидание",
+                                callback_data: "status_waiting"
+                            }
+                        ],
+
+                        [
+                            {
+                                text: "❌ Отменен",
+                                callback_data: "status_cancelled"
+                            }
+                        ]
+
+                    ]
+
+                );
+
+
+                return res
+                    .status(200)
+                    .send("OK");
+
+            }
+
+
+// =====================================
+// STATUS BUTTONS — STEP 9
+// =====================================
+
+            if (
+                state.step === 9 &&
+                (
+                    data === "status_confirmed" ||
+                    data === "status_waiting" ||
+                    data === "status_cancelled"
+                )
+            ) {
+
+                let status = "";
+
+
+                if (data === "status_confirmed") {
+
+                    status = "✅ Подтвержден";
+
+                }
+
+                if (data === "status_waiting") {
+
+                    status = "⏳ Ожидание";
+
+                }
+
+                if (data === "status_cancelled") {
+
+                    status = "❌ Отменен";
+
+                }
+
+
+                state.data.push(status);
+
+
+                await removeInlineButtons(
+                    chatId,
+                    messageId
+                );
+
+
+// =====================================
+// CREATE PASSENGER ID
+// =====================================
+
+                const passengerId =
+                    Date.now();
+
+
+// =====================================
+// CREATE ROW
+// =====================================
+//
+// A = ID
+// B = Фамилия
+// C = Имя
+// D = Отчество
+// E = Дата рождения
+// F = Паспорт
+// G = Гражданство
+// H = Дата рейса
+// I = Маршрут
+// J = Статус
+//
+// =====================================
+
+                const row = [
+
+                    passengerId,
+
+                    state.data[0],
+                    state.data[1],
+                    state.data[2],
+                    state.data[3],
+                    state.data[4],
+                    state.data[5],
+                    state.data[6],
+                    state.data[7],
+                    state.data[8]
+
+                ];
+
+
+// =====================================
+// SAVE TO GOOGLE SHEETS
+// =====================================
+
+                await addPassenger(row);
+
+
+// =====================================
+// SAVE LAST PASSENGER
+// =====================================
+
+                lastPassengers[chatId] = {
+
+                    id: passengerId,
+
+                    surname: state.data[0],
+
+                    name: state.data[1],
+
+                    patronymic: state.data[2],
+
+                    birthDate: state.data[3],
+
+                    passport: state.data[4],
+
+                    citizenship: state.data[5],
+
+                    flightDate: state.data[6],
+
+                    route: state.data[7],
+
+                    status: state.data[8]
+
+                };
+
+
+// =====================================
+// CLEAR REGISTRATION
+// =====================================
+
+                delete userStates[chatId];
+
+
+// =====================================
+// SUCCESS + ACTION MENU
+// =====================================
+
+                await sendMessage(
+
+                    chatId,
+
+                    "✅ Пассажир успешно добавлен!\n\n" +
+
+                    `🆔 ID пассажира: ${passengerId}\n\n` +
+
+                    "Данные сохранены в Google Таблицу.\n\n" +
+
+                    "Выберите следующее действие:",
+
+                    [
+
+                        [
+                            "➕ Добавить ещё одного"
+                        ],
+
+                        [
+                            "👤 Посмотреть данные"
+                        ],
+
+                        [
+                            "🏠 Главное меню"
+                        ]
+
+                    ]
+
+                );
+
+
+                return res
+                    .status(200)
+                    .send("OK");
+
+            }
+
+
+            return res
+                .status(200)
+                .send("OK");
+
+        }
+
+
+// =====================================
+// NORMAL MESSAGE
+// =====================================
+
         if (!update.message) {
 
             return res
@@ -379,7 +775,7 @@ app.post("/telegram/webhook", async (req, res) => {
 
 
 // =====================================
-// MAIN MENU BUTTON
+// MAIN MENU
 // =====================================
 
         if (text === "🏠 Главное меню") {
@@ -475,7 +871,6 @@ app.post("/telegram/webhook", async (req, res) => {
                 chatId,
 
                 "🔎 Поиск пассажира\n\n" +
-
                 "Эта функция будет подключена следующим этапом."
 
             );
@@ -502,7 +897,6 @@ app.post("/telegram/webhook", async (req, res) => {
                 chatId,
 
                 "✈️ Пассажиры рейса\n\n" +
-
                 "Эта функция будет подключена следующим этапом."
 
             );
@@ -529,7 +923,6 @@ app.post("/telegram/webhook", async (req, res) => {
                 chatId,
 
                 "📊 Статистика\n\n" +
-
                 "Эта функция будет подключена следующим этапом."
 
             );
@@ -568,7 +961,6 @@ app.post("/telegram/webhook", async (req, res) => {
                     chatId,
 
                     "Шаг 2 из 9\n\n" +
-
                     "Введите имя пассажира:"
 
                 );
@@ -595,7 +987,6 @@ app.post("/telegram/webhook", async (req, res) => {
                     chatId,
 
                     "Шаг 3 из 9\n\n" +
-
                     "Введите отчество пассажира:"
 
                 );
@@ -622,7 +1013,6 @@ app.post("/telegram/webhook", async (req, res) => {
                     chatId,
 
                     "Шаг 4 из 9\n\n" +
-
                     "Введите дату рождения:"
 
                 );
@@ -649,7 +1039,6 @@ app.post("/telegram/webhook", async (req, res) => {
                     chatId,
 
                     "Шаг 5 из 9\n\n" +
-
                     "Введите номер паспорта:"
 
                 );
@@ -676,7 +1065,6 @@ app.post("/telegram/webhook", async (req, res) => {
                     chatId,
 
                     "Шаг 6 из 9\n\n" +
-
                     "Введите гражданство:"
 
                 );
@@ -703,7 +1091,6 @@ app.post("/telegram/webhook", async (req, res) => {
                     chatId,
 
                     "Шаг 7 из 9\n\n" +
-
                     "Введите дату рейса:"
 
                 );
@@ -726,24 +1113,33 @@ app.post("/telegram/webhook", async (req, res) => {
                 state.step = 8;
 
 
-                await sendMessage(
+                await sendInlineMessage(
 
                     chatId,
 
                     "Шаг 8 из 9\n\n" +
-
                     "✈️ Выберите маршрут:",
 
                     [
 
                         [
-                            "✈️ ДШБ — ХРГ",
-                            "✈️ ХРГ — ДШБ"
+                            {
+                                text: "✈️ ДШБ — ХРГ",
+                                callback_data: "route_dshb_khrg"
+                            }
+                        ],
+
+                        [
+                            {
+                                text: "✈️ ХРГ — ДШБ",
+                                callback_data: "route_khrg_dshb"
+                            }
                         ]
 
                     ]
 
                 );
+
 
                 return res
                     .status(200)
@@ -753,64 +1149,23 @@ app.post("/telegram/webhook", async (req, res) => {
 
 
 // =====================================
-// STEP 8 — ROUTE
+// STEP 8
+// =====================================
+//
+// Выбор маршрута теперь происходит
+// через Inline Keyboard.
+// Поэтому обычный текст здесь
+// не принимаем.
+//
 // =====================================
 
             if (state.step === 8) {
 
-                const routes = [
-
-                    "✈️ ДШБ — ХРГ",
-                    "✈️ ХРГ — ДШБ"
-
-                ];
-
-
-                if (!routes.includes(text)) {
-
-                    await sendMessage(
-
-                        chatId,
-
-                        "❗ Пожалуйста, выберите маршрут с помощью кнопки."
-
-                    );
-
-                    return res
-                        .status(200)
-                        .send("OK");
-
-                }
-
-
-                state.data.push(text);
-
-                state.step = 9;
-
-
                 await sendMessage(
 
                     chatId,
 
-                    "Шаг 9 из 9\n\n" +
-
-                    "📋 Выберите статус пассажира:",
-
-                    [
-
-                        [
-                            "✅ Подтвержден"
-                        ],
-
-                        [
-                            "⏳ Ожидание"
-                        ],
-
-                        [
-                            "❌ Отменен"
-                        ]
-
-                    ]
+                    "❗ Пожалуйста, выберите маршрут с помощью кнопки под сообщением."
 
                 );
 
@@ -822,156 +1177,21 @@ app.post("/telegram/webhook", async (req, res) => {
 
 
 // =====================================
-// STEP 9 — STATUS
+// STEP 9
+// =====================================
+//
+// Выбор статуса также происходит
+// через Inline Keyboard.
+//
 // =====================================
 
             if (state.step === 9) {
-
-                const statusOptions = [
-
-                    "✅ Подтвержден",
-                    "⏳ Ожидание",
-                    "❌ Отменен"
-
-                ];
-
-
-                if (!statusOptions.includes(text)) {
-
-                    await sendMessage(
-
-                        chatId,
-
-                        "❗ Пожалуйста, выберите статус с помощью кнопки."
-
-                    );
-
-                    return res
-                        .status(200)
-                        .send("OK");
-
-                }
-
-
-                state.data.push(text);
-
-
-// =====================================
-// CREATE PASSENGER ID
-// =====================================
-
-                const passengerId =
-                    Date.now();
-
-
-// =====================================
-// CREATE ROW
-// =====================================
-//
-// A = ID
-// B = Фамилия
-// C = Имя
-// D = Отчество
-// E = Дата рождения
-// F = Паспорт
-// G = Гражданство
-// H = Дата рейса
-// I = Маршрут
-// J = Статус
-//
-// =====================================
-
-                const row = [
-
-                    passengerId,
-
-                    state.data[0], // Фамилия
-                    state.data[1], // Имя
-                    state.data[2], // Отчество
-                    state.data[3], // Дата рождения
-                    state.data[4], // Паспорт
-                    state.data[5], // Гражданство
-                    state.data[6], // Дата рейса
-                    state.data[7], // Маршрут
-                    state.data[8]  // Статус
-
-                ];
-
-
-// =====================================
-// SAVE TO GOOGLE SHEETS
-// =====================================
-
-                await addPassenger(row);
-
-
-// =====================================
-// SAVE LAST PASSENGER
-// =====================================
-
-                lastPassengers[chatId] = {
-
-                    id: passengerId,
-
-                    surname: state.data[0],
-
-                    name: state.data[1],
-
-                    patronymic: state.data[2],
-
-                    birthDate: state.data[3],
-
-                    passport: state.data[4],
-
-                    citizenship: state.data[5],
-
-                    flightDate: state.data[6],
-
-                    route: state.data[7],
-
-                    status: state.data[8]
-
-                };
-
-
-// =====================================
-// CLEAR REGISTRATION
-// =====================================
-
-                delete userStates[chatId];
-
-
-// =====================================
-// SUCCESS + ACTION MENU
-// =====================================
 
                 await sendMessage(
 
                     chatId,
 
-                    "✅ Пассажир успешно добавлен!\n\n" +
-
-                    `🆔 ID пассажира: ${passengerId}\n\n` +
-
-                    "Данные сохранены в Google Таблицу.\n\n" +
-
-                    "Выберите следующее действие:",
-
-                    [
-
-                        [
-                            "➕ Добавить ещё одного"
-                        ],
-
-                        [
-                            "👤 Посмотреть данные"
-                        ],
-
-                        [
-                            "🏠 Главное меню"
-                        ]
-
-                    ]
+                    "❗ Пожалуйста, выберите статус с помощью кнопки под сообщением."
 
                 );
 
@@ -993,7 +1213,6 @@ app.post("/telegram/webhook", async (req, res) => {
             chatId,
 
             "❓ Неизвестная команда.\n\n" +
-
             "Пожалуйста, выберите действие из меню."
 
         );
