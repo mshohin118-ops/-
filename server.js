@@ -39,7 +39,7 @@ const lastPassengers = {};
 
 
 // =====================================
-// SEND TELEGRAM MESSAGE
+// SEND MESSAGE
 // =====================================
 
 async function sendMessage(chatId, text, keyboard = null) {
@@ -77,7 +77,7 @@ async function sendMessage(chatId, text, keyboard = null) {
 
 
 // =====================================
-// SEND INLINE BUTTONS
+// SEND INLINE MESSAGE
 // =====================================
 
 async function sendInlineMessage(chatId, text, buttons) {
@@ -112,7 +112,7 @@ async function sendInlineMessage(chatId, text, buttons) {
 
 
 // =====================================
-// REMOVE KEYBOARD
+// REMOVE REPLY KEYBOARD
 // =====================================
 
 async function removeKeyboard(chatId, text) {
@@ -255,7 +255,11 @@ async function startAddPassenger(chatId) {
 
         step: 1,
 
-        data: []
+        data: [],
+
+        birthYear: null,
+
+        birthMonth: null
 
     };
 
@@ -274,7 +278,7 @@ async function startAddPassenger(chatId) {
 
 
 // =====================================
-// ADD PASSENGER TO GOOGLE SHEETS
+// GOOGLE SHEETS
 // =====================================
 
 async function addPassenger(values) {
@@ -346,6 +350,409 @@ async function addPassenger(values) {
 
 
 // =====================================
+// BIRTH YEAR CALENDAR
+// =====================================
+
+async function showBirthYears(chatId) {
+
+    const currentYear =
+        new Date().getFullYear();
+
+    const years = [];
+
+    // Показываем 12 лет за один экран
+    for (
+        let year = currentYear;
+        year >= currentYear - 11;
+        year--
+    ) {
+
+        years.push(year);
+
+    }
+
+
+    const buttons = [];
+
+    for (let i = 0; i < years.length; i += 3) {
+
+        buttons.push([
+
+            {
+                text: String(years[i]),
+                callback_data: `birth_year_${years[i]}`
+            },
+
+            {
+                text: String(years[i + 1]),
+                callback_data: `birth_year_${years[i + 1]}`
+            },
+
+            {
+                text: String(years[i + 2]),
+                callback_data: `birth_year_${years[i + 2]}`
+            }
+
+        ]);
+
+    }
+
+
+    buttons.push([
+
+        {
+            text: "📅 Другие годы",
+            callback_data: "birth_years_more"
+        }
+
+    ]);
+
+
+    await sendInlineMessage(
+
+        chatId,
+
+        "Шаг 4 из 9\n\n" +
+        "🎂 Выберите год рождения:",
+
+        buttons
+
+    );
+}
+
+
+// =====================================
+// MORE BIRTH YEARS
+// =====================================
+
+async function showMoreBirthYears(chatId) {
+
+    const currentYear =
+        new Date().getFullYear();
+
+    const years = [];
+
+    for (
+        let year = currentYear - 12;
+        year >= currentYear - 35;
+        year--
+    ) {
+
+        years.push(year);
+
+    }
+
+
+    const buttons = [];
+
+    for (let i = 0; i < years.length; i += 3) {
+
+        const row = [];
+
+        for (let j = 0; j < 3; j++) {
+
+            if (years[i + j]) {
+
+                row.push({
+
+                    text: String(years[i + j]),
+
+                    callback_data:
+                        `birth_year_${years[i + j]}`
+
+                });
+
+            }
+
+        }
+
+        buttons.push(row);
+
+    }
+
+
+    buttons.push([
+
+        {
+            text: "⬅️ Назад",
+            callback_data: "birth_years_back"
+        }
+
+    ]);
+
+
+    await sendInlineMessage(
+
+        chatId,
+
+        "🎂 Выберите год рождения:",
+
+        buttons
+
+    );
+}
+
+
+// =====================================
+// BIRTH MONTH CALENDAR
+// =====================================
+
+async function showBirthMonths(chatId, year) {
+
+    const months = [
+
+        "Январь",
+        "Февраль",
+        "Март",
+        "Апрель",
+        "Май",
+        "Июнь",
+        "Июль",
+        "Август",
+        "Сентябрь",
+        "Октябрь",
+        "Ноябрь",
+        "Декабрь"
+
+    ];
+
+
+    const buttons = [];
+
+    for (let i = 0; i < 12; i += 2) {
+
+        buttons.push([
+
+            {
+                text: months[i],
+                callback_data: `birth_month_${i + 1}`
+            },
+
+            {
+                text: months[i + 1],
+                callback_data: `birth_month_${i + 2}`
+            }
+
+        ]);
+
+    }
+
+
+    buttons.push([
+
+        {
+            text: "⬅️ Изменить год",
+            callback_data: "birth_change_year"
+        }
+
+    ]);
+
+
+    await sendInlineMessage(
+
+        chatId,
+
+        "🎂 Год рождения: " + year + "\n\n" +
+        "Выберите месяц:",
+
+        buttons
+
+    );
+}
+
+
+// =====================================
+// BIRTH DAY CALENDAR
+// =====================================
+
+async function showBirthDays(chatId, year, month) {
+
+    const monthNames = [
+
+        "Январь",
+        "Февраль",
+        "Март",
+        "Апрель",
+        "Май",
+        "Июнь",
+        "Июль",
+        "Август",
+        "Сентябрь",
+        "Октябрь",
+        "Ноябрь",
+        "Декабрь"
+
+    ];
+
+
+    const daysInMonth =
+        new Date(year, month, 0).getDate();
+
+
+    const firstDay =
+        new Date(year, month - 1, 1).getDay();
+
+
+    // JS: воскресенье = 0
+    // Нам нужно: понедельник = 0
+    const startDay =
+        firstDay === 0
+            ? 6
+            : firstDay - 1;
+
+
+    const buttons = [];
+
+
+    // Дни недели
+    buttons.push([
+
+        {
+            text: "Пн",
+            callback_data: "calendar_none"
+        },
+
+        {
+            text: "Вт",
+            callback_data: "calendar_none"
+        },
+
+        {
+            text: "Ср",
+            callback_data: "calendar_none"
+        },
+
+        {
+            text: "Чт",
+            callback_data: "calendar_none"
+        },
+
+        {
+            text: "Пт",
+            callback_data: "calendar_none"
+        },
+
+        {
+            text: "Сб",
+            callback_data: "calendar_none"
+        },
+
+        {
+            text: "Вс",
+            callback_data: "calendar_none"
+        }
+
+    ]);
+
+
+    let week = [];
+
+
+    // Пустые места перед первым днём
+    for (let i = 0; i < startDay; i++) {
+
+        week.push({
+
+            text: " ",
+            callback_data: "calendar_none"
+
+        });
+
+    }
+
+
+    for (
+        let day = 1;
+        day <= daysInMonth;
+        day++
+    ) {
+
+        week.push({
+
+            text: String(day),
+
+            callback_data:
+                `birth_day_${day}`
+
+        });
+
+
+        if (week.length === 7) {
+
+            buttons.push(week);
+
+            week = [];
+
+        }
+
+    }
+
+
+    if (week.length > 0) {
+
+        while (week.length < 7) {
+
+            week.push({
+
+                text: " ",
+                callback_data: "calendar_none"
+
+            });
+
+        }
+
+        buttons.push(week);
+
+    }
+
+
+    buttons.push([
+
+        {
+            text: "⬅️ Изменить месяц",
+            callback_data: "birth_change_month"
+        }
+
+    ]);
+
+
+    await sendInlineMessage(
+
+        chatId,
+
+        "🎂 Дата рождения\n\n" +
+
+        `${monthNames[month - 1]} ${year}\n\n` +
+
+        "Выберите день:",
+
+        buttons
+
+    );
+}
+
+
+// =====================================
+// AFTER BIRTH DATE
+// =====================================
+
+async function afterBirthDate(chatId, date) {
+
+    await removeKeyboard(
+
+        chatId,
+
+        "Шаг 5 из 9\n\n" +
+
+        `🎂 Дата рождения: ${date}\n\n` +
+
+        "Введите номер паспорта:"
+
+    );
+}
+
+
+// =====================================
 // MAIN PAGE
 // =====================================
 
@@ -370,7 +777,7 @@ app.post("/telegram/webhook", async (req, res) => {
 
 
 // =====================================
-// CALLBACK QUERY — INLINE BUTTONS
+// CALLBACK QUERY
 // =====================================
 
         if (update.callback_query) {
@@ -397,6 +804,19 @@ app.post("/telegram/webhook", async (req, res) => {
             );
 
 
+// =====================================
+// EMPTY CALENDAR BUTTON
+// =====================================
+
+            if (data === "calendar_none") {
+
+                return res
+                    .status(200)
+                    .send("OK");
+
+            }
+
+
             if (!state) {
 
                 await removeInlineButtons(
@@ -412,7 +832,279 @@ app.post("/telegram/webhook", async (req, res) => {
 
 
 // =====================================
-// ROUTE BUTTONS — STEP 8
+// BIRTH YEARS
+// =====================================
+
+            if (data === "birth_years_more") {
+
+                await removeInlineButtons(
+                    chatId,
+                    messageId
+                );
+
+                await showMoreBirthYears(chatId);
+
+                return res
+                    .status(200)
+                    .send("OK");
+
+            }
+
+
+            if (data === "birth_years_back") {
+
+                await removeInlineButtons(
+                    chatId,
+                    messageId
+                );
+
+                await showBirthYears(chatId);
+
+                return res
+                    .status(200)
+                    .send("OK");
+
+            }
+
+
+// =====================================
+// SELECT BIRTH YEAR
+// =====================================
+
+            if (data.startsWith("birth_year_")) {
+
+                const year =
+                    Number(
+                        data.replace(
+                            "birth_year_",
+                            ""
+                        )
+                    );
+
+
+                if (
+                    !Number.isInteger(year) ||
+                    year < 1900 ||
+                    year > new Date().getFullYear()
+                ) {
+
+                    return res
+                        .status(200)
+                        .send("OK");
+
+                }
+
+
+                state.birthYear = year;
+
+
+                await removeInlineButtons(
+                    chatId,
+                    messageId
+                );
+
+
+                await showBirthMonths(
+                    chatId,
+                    year
+                );
+
+
+                return res
+                    .status(200)
+                    .send("OK");
+
+            }
+
+
+// =====================================
+// CHANGE BIRTH YEAR
+// =====================================
+
+            if (data === "birth_change_year") {
+
+                await removeInlineButtons(
+                    chatId,
+                    messageId
+                );
+
+                await showBirthYears(chatId);
+
+                return res
+                    .status(200)
+                    .send("OK");
+
+            }
+
+
+// =====================================
+// SELECT BIRTH MONTH
+// =====================================
+
+            if (data.startsWith("birth_month_")) {
+
+                const month =
+                    Number(
+                        data.replace(
+                            "birth_month_",
+                            ""
+                        )
+                    );
+
+
+                if (
+                    !Number.isInteger(month) ||
+                    month < 1 ||
+                    month > 12
+                ) {
+
+                    return res
+                        .status(200)
+                        .send("OK");
+
+                }
+
+
+                state.birthMonth = month;
+
+
+                await removeInlineButtons(
+                    chatId,
+                    messageId
+                );
+
+
+                await showBirthDays(
+
+                    chatId,
+
+                    state.birthYear,
+
+                    month
+
+                );
+
+
+                return res
+                    .status(200)
+                    .send("OK");
+
+            }
+
+
+// =====================================
+// CHANGE BIRTH MONTH
+// =====================================
+
+            if (data === "birth_change_month") {
+
+                await removeInlineButtons(
+                    chatId,
+                    messageId
+                );
+
+
+                await showBirthMonths(
+
+                    chatId,
+
+                    state.birthYear
+
+                );
+
+
+                return res
+                    .status(200)
+                    .send("OK");
+
+            }
+
+
+// =====================================
+// SELECT BIRTH DAY
+// =====================================
+
+            if (data.startsWith("birth_day_")) {
+
+                const day =
+                    Number(
+                        data.replace(
+                            "birth_day_",
+                            ""
+                        )
+                    );
+
+
+                const year =
+                    state.birthYear;
+
+                const month =
+                    state.birthMonth;
+
+
+                const daysInMonth =
+                    new Date(
+                        year,
+                        month,
+                        0
+                    ).getDate();
+
+
+                if (
+                    !Number.isInteger(day) ||
+                    day < 1 ||
+                    day > daysInMonth
+                ) {
+
+                    return res
+                        .status(200)
+                        .send("OK");
+
+                }
+
+
+                const formattedDate =
+
+                    String(day).padStart(2, "0") +
+                    "." +
+                    String(month).padStart(2, "0") +
+                    "." +
+                    year;
+
+
+                // Сохраняем дату рождения
+                state.data.push(
+                    formattedDate
+                );
+
+
+                state.step = 5;
+
+
+                await removeInlineButtons(
+                    chatId,
+                    messageId
+                );
+
+
+                await afterBirthDate(
+
+                    chatId,
+
+                    formattedDate
+
+                );
+
+
+                return res
+                    .status(200)
+                    .send("OK");
+
+            }
+
+
+// =====================================
+// ROUTE — STEP 8
 // =====================================
 
             if (
@@ -425,15 +1117,23 @@ app.post("/telegram/webhook", async (req, res) => {
 
                 let route = "";
 
-                if (data === "route_dshb_khrg") {
 
-                    route = "✈️ ДШБ — ХРГ";
+                if (
+                    data === "route_dshb_khrg"
+                ) {
+
+                    route =
+                        "✈️ ДШБ — ХРГ";
 
                 }
 
-                if (data === "route_khrg_dshb") {
 
-                    route = "✈️ ХРГ — ДШБ";
+                if (
+                    data === "route_khrg_dshb"
+                ) {
+
+                    route =
+                        "✈️ ХРГ — ДШБ";
 
                 }
 
@@ -492,7 +1192,7 @@ app.post("/telegram/webhook", async (req, res) => {
 
 
 // =====================================
-// STATUS BUTTONS — STEP 9
+// STATUS — STEP 9
 // =====================================
 
             if (
@@ -507,21 +1207,32 @@ app.post("/telegram/webhook", async (req, res) => {
                 let status = "";
 
 
-                if (data === "status_confirmed") {
+                if (
+                    data === "status_confirmed"
+                ) {
 
-                    status = "✅ Подтвержден";
-
-                }
-
-                if (data === "status_waiting") {
-
-                    status = "⏳ Ожидание";
+                    status =
+                        "✅ Подтвержден";
 
                 }
 
-                if (data === "status_cancelled") {
 
-                    status = "❌ Отменен";
+                if (
+                    data === "status_waiting"
+                ) {
+
+                    status =
+                        "⏳ Ожидание";
+
+                }
+
+
+                if (
+                    data === "status_cancelled"
+                ) {
+
+                    status =
+                        "❌ Отменен";
 
                 }
 
@@ -536,7 +1247,7 @@ app.post("/telegram/webhook", async (req, res) => {
 
 
 // =====================================
-// CREATE PASSENGER ID
+// CREATE ID
 // =====================================
 
                 const passengerId =
@@ -544,7 +1255,7 @@ app.post("/telegram/webhook", async (req, res) => {
 
 
 // =====================================
-// CREATE ROW
+// GOOGLE SHEETS ROW
 // =====================================
 //
 // A = ID
@@ -578,14 +1289,14 @@ app.post("/telegram/webhook", async (req, res) => {
 
 
 // =====================================
-// SAVE TO GOOGLE SHEETS
+// SAVE
 // =====================================
 
                 await addPassenger(row);
 
 
 // =====================================
-// SAVE LAST PASSENGER
+// LAST PASSENGER
 // =====================================
 
                 lastPassengers[chatId] = {
@@ -614,14 +1325,14 @@ app.post("/telegram/webhook", async (req, res) => {
 
 
 // =====================================
-// CLEAR REGISTRATION
+// CLEAR STATE
 // =====================================
 
                 delete userStates[chatId];
 
 
 // =====================================
-// SUCCESS + ACTION MENU
+// SUCCESS
 // =====================================
 
                 await sendMessage(
@@ -760,10 +1471,12 @@ app.post("/telegram/webhook", async (req, res) => {
 
 
 // =====================================
-// ADD ANOTHER PASSENGER
+// ADD ANOTHER
 // =====================================
 
-        if (text === "➕ Добавить ещё одного") {
+        if (
+            text === "➕ Добавить ещё одного"
+        ) {
 
             await startAddPassenger(chatId);
 
@@ -778,7 +1491,9 @@ app.post("/telegram/webhook", async (req, res) => {
 // MAIN MENU
 // =====================================
 
-        if (text === "🏠 Главное меню") {
+        if (
+            text === "🏠 Главное меню"
+        ) {
 
             delete userStates[chatId];
 
@@ -795,7 +1510,9 @@ app.post("/telegram/webhook", async (req, res) => {
 // VIEW LAST PASSENGER
 // =====================================
 
-        if (text === "👤 Посмотреть данные") {
+        if (
+            text === "👤 Посмотреть данные"
+        ) {
 
             const passenger =
                 lastPassengers[chatId];
@@ -862,7 +1579,9 @@ app.post("/telegram/webhook", async (req, res) => {
 // FIND PASSENGER
 // =====================================
 
-        if (text === "🔎 Найти пассажира") {
+        if (
+            text === "🔎 Найти пассажира"
+        ) {
 
             delete userStates[chatId];
 
@@ -888,7 +1607,9 @@ app.post("/telegram/webhook", async (req, res) => {
 // PASSENGERS BY FLIGHT
 // =====================================
 
-        if (text === "✈️ Пассажиры рейса") {
+        if (
+            text === "✈️ Пассажиры рейса"
+        ) {
 
             delete userStates[chatId];
 
@@ -914,7 +1635,9 @@ app.post("/telegram/webhook", async (req, res) => {
 // STATISTICS
 // =====================================
 
-        if (text === "📊 Статистика") {
+        if (
+            text === "📊 Статистика"
+        ) {
 
             delete userStates[chatId];
 
@@ -1004,18 +1727,9 @@ app.post("/telegram/webhook", async (req, res) => {
 
             if (state.step === 3) {
 
-                state.data.push(text);
-
                 state.step = 4;
 
-                await removeKeyboard(
-
-                    chatId,
-
-                    "Шаг 4 из 9\n\n" +
-                    "Введите дату рождения:"
-
-                );
+                await showBirthYears(chatId);
 
                 return res
                     .status(200)
@@ -1025,21 +1739,22 @@ app.post("/telegram/webhook", async (req, res) => {
 
 
 // =====================================
-// STEP 4 — DATE OF BIRTH
+// STEP 4 — BIRTH DATE
+// =====================================
+//
+// На этом шаге обычный текст
+// не принимается.
+// Используется календарь.
+//
 // =====================================
 
             if (state.step === 4) {
 
-                state.data.push(text);
-
-                state.step = 5;
-
-                await removeKeyboard(
+                await sendMessage(
 
                     chatId,
 
-                    "Шаг 5 из 9\n\n" +
-                    "Введите номер паспорта:"
+                    "❗ Пожалуйста, выберите дату рождения с помощью календаря."
 
                 );
 
@@ -1149,14 +1864,7 @@ app.post("/telegram/webhook", async (req, res) => {
 
 
 // =====================================
-// STEP 8
-// =====================================
-//
-// Выбор маршрута теперь происходит
-// через Inline Keyboard.
-// Поэтому обычный текст здесь
-// не принимаем.
-//
+// STEP 8 — ROUTE TEXT
 // =====================================
 
             if (state.step === 8) {
@@ -1177,12 +1885,7 @@ app.post("/telegram/webhook", async (req, res) => {
 
 
 // =====================================
-// STEP 9
-// =====================================
-//
-// Выбор статуса также происходит
-// через Inline Keyboard.
-//
+// STEP 9 — STATUS TEXT
 // =====================================
 
             if (state.step === 9) {
