@@ -8,7 +8,8 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 10000;
 
-const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const TELEGRAM_BOT_TOKEN =
+    process.env.TELEGRAM_BOT_TOKEN;
 
 const GOOGLE_CLIENT_EMAIL =
     process.env.GOOGLE_CLIENT_EMAIL;
@@ -78,7 +79,10 @@ let cachedSheetTitle = null;
    TELEGRAM
 ========================================================= */
 
-async function telegramRequest(method, body = {}) {
+async function telegramRequest(
+    method,
+    body = {}
+) {
     if (!TELEGRAM_BOT_TOKEN) {
         throw new Error(
             "TELEGRAM_BOT_TOKEN не установлен"
@@ -90,17 +94,19 @@ async function telegramRequest(method, body = {}) {
         {
             method: "POST",
             headers: {
-                "Content-Type": "application/json"
+                "Content-Type":
+                    "application/json"
             },
             body: JSON.stringify(body)
         }
     );
 
-    const result = await response.json();
+    const result =
+        await response.json();
 
     if (!result.ok) {
         console.error(
-            `Telegram ${method}:`,
+            `❌ Telegram ${method}:`,
             result
         );
     }
@@ -119,7 +125,8 @@ async function sendMessage(
     };
 
     if (replyMarkup) {
-        body.reply_markup = replyMarkup;
+        body.reply_markup =
+            replyMarkup;
     }
 
     return telegramRequest(
@@ -144,10 +151,13 @@ async function editMessage(
             }
     };
 
-    return telegramRequest(
-        "editMessageText",
-        body
-    );
+    const result =
+        await telegramRequest(
+            "editMessageText",
+            body
+        );
+
+    return result;
 }
 
 async function answerCallbackQuery(
@@ -168,7 +178,9 @@ async function deleteUserMessage(
     chatId,
     messageId
 ) {
-    if (!messageId) return;
+    if (!messageId) {
+        return;
+    }
 
     try {
         const result =
@@ -221,7 +233,8 @@ function getGoogleAuth() {
 }
 
 async function getSheets() {
-    const auth = getGoogleAuth();
+    const auth =
+        getGoogleAuth();
 
     return google.sheets({
         version: "v4",
@@ -234,7 +247,8 @@ async function getSheetTitle() {
         return cachedSheetTitle;
     }
 
-    const sheets = await getSheets();
+    const sheets =
+        await getSheets();
 
     const spreadsheet =
         await sheets.spreadsheets.get({
@@ -255,24 +269,35 @@ async function getSheetTitle() {
         spreadsheet.data.sheets[0]
             .properties.title;
 
+    console.log(
+        "📄 Используется лист:",
+        cachedSheetTitle
+    );
+
     return cachedSheetTitle;
 }
 
 async function getAllPassengers() {
-    const sheets = await getSheets();
+    const sheets =
+        await getSheets();
 
     const sheetTitle =
         await getSheetTitle();
 
     const result =
-        await sheets.spreadsheets.values.get({
-            spreadsheetId:
-                SPREADSHEET_ID,
-            range:
-                `${sheetTitle}!A:L`
-        });
+        await sheets.spreadsheets.values.get(
+            {
+                spreadsheetId:
+                    SPREADSHEET_ID,
 
-    return result.data.values || [];
+                range:
+                    `${sheetTitle}!A:L`
+            }
+        );
+
+    return (
+        result.data.values || []
+    );
 }
 
 
@@ -281,7 +306,9 @@ async function getAllPassengers() {
 ========================================================= */
 
 function normalizeText(value) {
-    return String(value || "").trim();
+    return String(
+        value || ""
+    ).trim();
 }
 
 function createState() {
@@ -330,13 +357,21 @@ function generatePassengerId() {
 }
 
 function validateTajikPhone(phone) {
-    phone = phone.trim();
+    phone =
+        phone.trim();
 
-    if (/^\d{9}$/.test(phone)) {
-        phone = "+992" + phone;
+    if (
+        /^\d{9}$/.test(phone)
+    ) {
+        phone =
+            "+992" + phone;
     }
 
-    if (!/^\+992\d{9}$/.test(phone)) {
+    if (
+        !/^\+992\d{9}$/.test(
+            phone
+        )
+    ) {
         return null;
     }
 
@@ -353,23 +388,33 @@ function isValidDateString(date) {
     }
 
     const parts =
-        date.split(".").map(Number);
+        date
+            .split(".")
+            .map(Number);
 
-    const day = parts[0];
-    const month = parts[1];
-    const year = parts[2];
+    const day =
+        parts[0];
 
-    const d = new Date(
-        year,
-        month - 1,
-        day
-    );
+    const month =
+        parts[1];
+
+    const year =
+        parts[2];
+
+    const d =
+        new Date(
+            year,
+            month - 1,
+            day
+        );
 
     return (
-        d.getFullYear() === year &&
+        d.getFullYear() ===
+            year &&
         d.getMonth() ===
             month - 1 &&
-        d.getDate() === day
+        d.getDate() ===
+            day
     );
 }
 
@@ -383,35 +428,40 @@ function getMainMenuKeyboard() {
         inline_keyboard: [
             [
                 {
-                    text: "➕ Добавить пассажира",
+                    text:
+                        "➕ Добавить пассажира",
                     callback_data:
                         "main_add_passenger"
                 }
             ],
             [
                 {
-                    text: "👤 Посмотреть данные",
+                    text:
+                        "👤 Посмотреть данные",
                     callback_data:
                         "main_view_data"
                 }
             ],
             [
                 {
-                    text: "🔎 Найти пассажира",
+                    text:
+                        "🔎 Найти пассажира",
                     callback_data:
                         "main_find_passenger"
                 }
             ],
             [
                 {
-                    text: "✈️ Пассажиры рейса",
+                    text:
+                        "✈️ Пассажиры рейса",
                     callback_data:
                         "main_flight_passengers"
                 }
             ],
             [
                 {
-                    text: "📊 Статистика",
+                    text:
+                        "📊 Статистика",
                     callback_data:
                         "main_statistics"
                 }
@@ -445,8 +495,11 @@ async function showMainMenu(
    REGISTRATION
 ========================================================= */
 
-async function startRegistration(chatId) {
-    const state = createState();
+async function startRegistration(
+    chatId
+) {
+    const state =
+        createState();
 
     states.set(
         chatId,
@@ -679,14 +732,16 @@ function getContactsMenuKeyboard() {
         inline_keyboard: [
             [
                 {
-                    text: "➕ Добавить ещё один номер",
+                    text:
+                        "➕ Добавить ещё один номер",
                     callback_data:
                         "add_contact2"
                 }
             ],
             [
                 {
-                    text: "➡️ Продолжить",
+                    text:
+                        "➡️ Продолжить",
                     callback_data:
                         "contacts_continue"
                 }
@@ -728,14 +783,16 @@ function getRouteKeyboard() {
         inline_keyboard: [
             [
                 {
-                    text: "ДШБ — ХРГ",
+                    text:
+                        "ДШБ — ХРГ",
                     callback_data:
                         "route_DSHB_XRG"
                 }
             ],
             [
                 {
-                    text: "ХРГ — ДШБ",
+                    text:
+                        "ХРГ — ДШБ",
                     callback_data:
                         "route_XRG_DSHB"
                 }
@@ -766,21 +823,24 @@ function getStatusKeyboard() {
         inline_keyboard: [
             [
                 {
-                    text: "Забронирован",
+                    text:
+                        "Забронирован",
                     callback_data:
                         "status_booked"
                 }
             ],
             [
                 {
-                    text: "Подтвержден",
+                    text:
+                        "Подтвержден",
                     callback_data:
                         "status_confirmed"
                 }
             ],
             [
                 {
-                    text: "Отменен",
+                    text:
+                        "Отменен",
                     callback_data:
                         "status_cancelled"
                 }
@@ -806,7 +866,9 @@ async function showStatusMenu(
    CALENDAR
 ========================================================= */
 
-function getBaseCalendarType(type) {
+function getBaseCalendarType(
+    type
+) {
     if (
         type ===
         "birth_edit"
@@ -829,7 +891,9 @@ function getCalendarTitle(
     level
 ) {
     const base =
-        getBaseCalendarType(type);
+        getBaseCalendarType(
+            type
+        );
 
     if (base === "birth") {
         if (level === "year") {
@@ -862,11 +926,17 @@ function getBirthYears(page) {
 
     const result = [];
 
-    for (let i = 0; i < 12; i++) {
+    for (
+        let i = 0;
+        i < 12;
+        i++
+    ) {
         const year =
             start - i;
 
-        if (year < 1940) {
+        if (
+            year < 1940
+        ) {
             break;
         }
 
@@ -886,7 +956,11 @@ function getFlightYears(page) {
 
     const result = [];
 
-    for (let i = 0; i < 12; i++) {
+    for (
+        let i = 0;
+        i < 12;
+        i++
+    ) {
         const year =
             start + i;
 
@@ -908,7 +982,9 @@ function getYearsKeyboard(
     page
 ) {
     const base =
-        getBaseCalendarType(type);
+        getBaseCalendarType(
+            type
+        );
 
     const years =
         base === "birth"
@@ -935,7 +1011,9 @@ function getYearsKeyboard(
         ) {
             row.push({
                 text:
-                    String(years[j]),
+                    String(
+                        years[j]
+                    ),
                 callback_data:
                     `calendar_year_${years[j]}`
             });
@@ -948,7 +1026,8 @@ function getYearsKeyboard(
 
     if (page > 0) {
         navigation.push({
-            text: "⬅️ Назад",
+            text:
+                "⬅️ Назад",
             callback_data:
                 `calendar_year_page_${
                     page - 1
@@ -965,9 +1044,12 @@ function getYearsKeyboard(
                   page + 1
               );
 
-    if (nextYears.length > 0) {
+    if (
+        nextYears.length > 0
+    ) {
         navigation.push({
-            text: "➡️ Далее",
+            text:
+                "➡️ Далее",
             callback_data:
                 `calendar_year_page_${
                     page + 1
@@ -975,7 +1057,9 @@ function getYearsKeyboard(
         });
     }
 
-    if (navigation.length) {
+    if (
+        navigation.length
+    ) {
         keyboard.push(
             navigation
         );
@@ -1015,7 +1099,8 @@ function getMonthsKeyboard() {
 
     keyboard.push([
         {
-            text: "⬅️ Назад",
+            text:
+                "⬅️ Назад",
             callback_data:
                 "calendar_back_years"
         }
@@ -1056,11 +1141,13 @@ function getDaysKeyboard(
     const keyboard = [];
 
     keyboard.push(
-        WEEKDAYS.map(day => ({
-            text: day,
-            callback_data:
-                "calendar_ignore"
-        }))
+        WEEKDAYS.map(
+            day => ({
+                text: day,
+                callback_data:
+                    "calendar_ignore"
+            })
+        )
     );
 
     let row = [];
@@ -1082,7 +1169,9 @@ function getDaysKeyboard(
         day <= daysInMonth;
         day++
     ) {
-        if (row.length === 7) {
+        if (
+            row.length === 7
+        ) {
             keyboard.push(row);
             row = [];
         }
@@ -1096,7 +1185,9 @@ function getDaysKeyboard(
     }
 
     if (row.length) {
-        while (row.length < 7) {
+        while (
+            row.length < 7
+        ) {
             row.push({
                 text: " ",
                 callback_data:
@@ -1109,7 +1200,8 @@ function getDaysKeyboard(
 
     keyboard.push([
         {
-            text: "⬅️ Назад",
+            text:
+                "⬅️ Назад",
             callback_data:
                 "calendar_back_months"
         }
@@ -1237,12 +1329,32 @@ async function calculateRouteOccupancy(
    SAVE / UPDATE
 ========================================================= */
 
-async function savePassenger(data) {
+async function savePassenger(
+    data
+) {
+    console.log(
+        "💾 НАЧАЛО СОХРАНЕНИЯ ПАССАЖИРА"
+    );
+
+    console.log(
+        "📋 Данные пассажира:",
+        JSON.stringify(data)
+    );
+
     const sheets =
         await getSheets();
 
+    console.log(
+        "✅ Google Sheets API подключён"
+    );
+
     const sheetTitle =
         await getSheetTitle();
+
+    console.log(
+        "📄 Используем лист:",
+        sheetTitle
+    );
 
     const values = [
         data.passengerId || "",
@@ -1259,34 +1371,97 @@ async function savePassenger(data) {
         data.status || ""
     ];
 
-    await sheets.spreadsheets.values.append({
-        spreadsheetId:
-            SPREADSHEET_ID,
+    console.log(
+        "📤 Отправляем строку в Google Sheets:",
+        JSON.stringify(values)
+    );
 
-        range:
-            `${sheetTitle}!A:L`,
+    try {
+        const result =
+            await sheets.spreadsheets.values.append(
+                {
+                    spreadsheetId:
+                        SPREADSHEET_ID,
 
-        valueInputOption:
-            "USER_ENTERED",
+                    range:
+                        `${sheetTitle}!A:L`,
 
-        requestBody: {
-            values: [values]
+                    valueInputOption:
+                        "USER_ENTERED",
+
+                    insertDataOption:
+                        "INSERT_ROWS",
+
+                    requestBody: {
+                        values: [
+                            values
+                        ]
+                    }
+                }
+            );
+
+        console.log(
+            "✅ GOOGLE SHEETS: строка успешно добавлена"
+        );
+
+        console.log(
+            "📍 Обновлённый диапазон:",
+            result.data.updates
+                ?.updatedRange ||
+                "не определён"
+        );
+
+        const rows =
+            await getAllPassengers();
+
+        data.rowNumber =
+            rows.length;
+
+        console.log(
+            `🔢 Номер строки пассажира: ${data.rowNumber}`
+        );
+
+        console.log(
+            "🎉 СОХРАНЕНИЕ ПАССАЖИРА ЗАВЕРШЕНО"
+        );
+
+        return true;
+    } catch (error) {
+        console.error(
+            "❌ ОШИБКА СОХРАНЕНИЯ В GOOGLE SHEETS"
+        );
+
+        console.error(
+            "❌ Сообщение:",
+            error.message
+        );
+
+        if (
+            error.response &&
+            error.response.data
+        ) {
+            console.error(
+                "❌ Google API:",
+                JSON.stringify(
+                    error.response.data,
+                    null,
+                    2
+                )
+            );
         }
-    });
 
-    const rows =
-        await getAllPassengers();
-
-    data.rowNumber =
-        rows.length;
-
-    return true;
+        throw error;
+    }
 }
 
 async function updatePassenger(
     rowNumber,
     data
 ) {
+    console.log(
+        `✏️ Обновление пассажира, строка ${rowNumber}`
+    );
+
     const sheets =
         await getSheets();
 
@@ -1308,20 +1483,40 @@ async function updatePassenger(
         data.status || ""
     ];
 
-    return sheets.spreadsheets.values.update({
-        spreadsheetId:
-            SPREADSHEET_ID,
+    try {
+        const result =
+            await sheets.spreadsheets.values.update(
+                {
+                    spreadsheetId:
+                        SPREADSHEET_ID,
 
-        range:
-            `${sheetTitle}!A${rowNumber}:L${rowNumber}`,
+                    range:
+                        `${sheetTitle}!A${rowNumber}:L${rowNumber}`,
 
-        valueInputOption:
-            "USER_ENTERED",
+                    valueInputOption:
+                        "USER_ENTERED",
 
-        requestBody: {
-            values: [values]
-        }
-    });
+                    requestBody: {
+                        values: [
+                            values
+                        ]
+                    }
+                }
+            );
+
+        console.log(
+            `✅ Строка ${rowNumber} успешно обновлена`
+        );
+
+        return result;
+    } catch (error) {
+        console.error(
+            "❌ ОШИБКА ОБНОВЛЕНИЯ GOOGLE SHEETS:",
+            error.message
+        );
+
+        throw error;
+    }
 }
 
 
@@ -1329,44 +1524,58 @@ async function updatePassenger(
    PASSENGER CARD
 ========================================================= */
 
-function buildPassengerCard(data) {
+function buildPassengerCard(
+    data
+) {
     return (
         "👤 Данные пассажира\n\n" +
         `🆔 ID: ${
-            data.passengerId || "—"
+            data.passengerId ||
+            "—"
         }\n` +
         `Фамилия: ${
-            data.surname || "—"
+            data.surname ||
+            "—"
         }\n` +
         `Имя: ${
-            data.name || "—"
+            data.name ||
+            "—"
         }\n` +
         `Отчество: ${
-            data.patronymic || "—"
+            data.patronymic ||
+            "—"
         }\n` +
         `Дата рождения: ${
-            data.birthDate || "—"
+            data.birthDate ||
+            "—"
         }\n` +
         `Паспорт: ${
-            data.passport || "—"
+            data.passport ||
+            "—"
         }\n` +
         `Гражданство: ${
-            data.citizenship || "—"
+            data.citizenship ||
+            "—"
         }\n` +
         `Контакт 1: ${
-            data.contact1 || "—"
+            data.contact1 ||
+            "—"
         }\n` +
         `Контакт 2: ${
-            data.contact2 || "—"
+            data.contact2 ||
+            "—"
         }\n` +
         `Дата рейса: ${
-            data.flightDate || "—"
+            data.flightDate ||
+            "—"
         }\n` +
         `Маршрут: ${
-            data.route || "—"
+            data.route ||
+            "—"
         }\n` +
         `Статус: ${
-            data.status || "—"
+            data.status ||
+            "—"
         }`
     );
 }
@@ -1376,21 +1585,24 @@ function getPassengerCardKeyboard() {
         inline_keyboard: [
             [
                 {
-                    text: "✏️ Изменить данные",
+                    text:
+                        "✏️ Изменить данные",
                     callback_data:
                         "passenger_edit"
                 }
             ],
             [
                 {
-                    text: "➕ Добавить ещё одного",
+                    text:
+                        "➕ Добавить ещё одного",
                     callback_data:
                         "passenger_add_another"
                 }
             ],
             [
                 {
-                    text: "🏠 Главное меню",
+                    text:
+                        "🏠 Главное меню",
                     callback_data:
                         "passenger_main_menu"
                 }
@@ -1423,82 +1635,94 @@ function getEditMenuKeyboard() {
         inline_keyboard: [
             [
                 {
-                    text: "✏️ Фамилия",
+                    text:
+                        "✏️ Фамилия",
                     callback_data:
                         "edit_surname"
                 },
                 {
-                    text: "✏️ Имя",
+                    text:
+                        "✏️ Имя",
                     callback_data:
                         "edit_name"
                 }
             ],
             [
                 {
-                    text: "✏️ Отчество",
+                    text:
+                        "✏️ Отчество",
                     callback_data:
                         "edit_patronymic"
                 }
             ],
             [
                 {
-                    text: "✏️ Дата рождения",
+                    text:
+                        "✏️ Дата рождения",
                     callback_data:
                         "edit_birthDate"
                 }
             ],
             [
                 {
-                    text: "✏️ Паспорт",
+                    text:
+                        "✏️ Паспорт",
                     callback_data:
                         "edit_passport"
                 }
             ],
             [
                 {
-                    text: "✏️ Гражданство",
+                    text:
+                        "✏️ Гражданство",
                     callback_data:
                         "edit_citizenship"
                 }
             ],
             [
                 {
-                    text: "✏️ Контакт 1",
+                    text:
+                        "✏️ Контакт 1",
                     callback_data:
                         "edit_contact1"
                 }
             ],
             [
                 {
-                    text: "✏️ Контакт 2",
+                    text:
+                        "✏️ Контакт 2",
                     callback_data:
                         "edit_contact2"
                 }
             ],
             [
                 {
-                    text: "✏️ Дата рейса",
+                    text:
+                        "✏️ Дата рейса",
                     callback_data:
                         "edit_flightDate"
                 }
             ],
             [
                 {
-                    text: "✏️ Маршрут",
+                    text:
+                        "✏️ Маршрут",
                     callback_data:
                         "edit_route"
                 }
             ],
             [
                 {
-                    text: "✏️ Статус",
+                    text:
+                        "✏️ Статус",
                     callback_data:
                         "edit_status"
                 }
             ],
             [
                 {
-                    text: "↩️ Назад",
+                    text:
+                        "↩️ Назад",
                     callback_data:
                         "edit_menu_back"
                 }
@@ -1511,7 +1735,8 @@ async function showEditMenu(
     chatId,
     state
 ) {
-    state.editingField = null;
+    state.editingField =
+        null;
 
     await editMessage(
         chatId,
@@ -1550,7 +1775,8 @@ function getEditCitizenshipKeyboard() {
             ],
             [
                 {
-                    text: "↩️ Назад",
+                    text:
+                        "↩️ Назад",
                     callback_data:
                         "edit_back"
                 }
@@ -1583,14 +1809,16 @@ function getEditContactKeyboard(
         inline_keyboard: [
             [
                 {
-                    text: "🌍 Другое",
+                    text:
+                        "🌍 Другое",
                     callback_data:
                         `edit_contact${number}_other`
                 }
             ],
             [
                 {
-                    text: "↩️ Назад",
+                    text:
+                        "↩️ Назад",
                     callback_data:
                         "edit_back"
                 }
@@ -1623,19 +1851,43 @@ async function finishRegistration(
     chatId,
     state
 ) {
+    console.log(
+        "🏁 FINISH REGISTRATION"
+    );
+
+    console.log(
+        "📋 Перед сохранением:",
+        JSON.stringify(
+            state.data
+        )
+    );
+
     if (
         state.data.status !==
         "Отменен"
     ) {
+        console.log(
+            "🔍 Проверяем свободные места..."
+        );
+
         const occupancy =
             await calculateRouteOccupancy(
                 state.data.flightDate,
                 state.data.route
             );
 
+        console.log(
+            `💺 Занято мест: ${occupancy}/${CAPACITY}`
+        );
+
         if (
-            occupancy >= CAPACITY
+            occupancy >=
+            CAPACITY
         ) {
+            console.log(
+                "❌ Рейс заполнен"
+            );
+
             await editMessage(
                 chatId,
                 state.messageId,
@@ -1644,7 +1896,8 @@ async function finishRegistration(
                     inline_keyboard: [
                         [
                             {
-                                text: "↩️ Выбрать другой маршрут",
+                                text:
+                                    "↩️ Выбрать другой маршрут",
                                 callback_data:
                                     "registration_back_route"
                             }
@@ -1660,14 +1913,52 @@ async function finishRegistration(
     state.data.passengerId =
         generatePassengerId();
 
-    await savePassenger(
-        state.data
+    console.log(
+        "🆔 Сгенерирован ID:",
+        state.data.passengerId
     );
 
-    await showPassengerCard(
-        chatId,
-        state
-    );
+    try {
+        await savePassenger(
+            state.data
+        );
+
+        console.log(
+            "✅ Пассажир сохранён в Google Sheets"
+        );
+
+        await showPassengerCard(
+            chatId,
+            state
+        );
+
+        console.log(
+            "👤 Карточка пассажира показана"
+        );
+    } catch (error) {
+        console.error(
+            "❌ ПассАЖИР НЕ СОХРАНЁН:",
+            error.message
+        );
+
+        await editMessage(
+            chatId,
+            state.messageId,
+            "❌ Не удалось сохранить пассажира в Google Sheets.\n\nПопробуйте ещё раз или обратитесь к администратору.",
+            {
+                inline_keyboard: [
+                    [
+                        {
+                            text:
+                                "↩️ Главное меню",
+                            callback_data:
+                                "passenger_main_menu"
+                        }
+                    ]
+                ]
+            }
+        );
+    }
 }
 
 
@@ -1680,42 +1971,48 @@ function getViewDataKeyboard() {
         inline_keyboard: [
             [
                 {
-                    text: "📋 Все пассажиры",
+                    text:
+                        "📋 Все пассажиры",
                     callback_data:
                         "view_all"
                 }
             ],
             [
                 {
-                    text: "📅 По дате рейса",
+                    text:
+                        "📅 По дате рейса",
                     callback_data:
                         "view_by_date"
                 }
             ],
             [
                 {
-                    text: "✈️ По маршруту",
+                    text:
+                        "✈️ По маршруту",
                     callback_data:
                         "view_by_route"
                 }
             ],
             [
                 {
-                    text: "🔎 Найти по паспорту",
+                    text:
+                        "🔎 Найти по паспорту",
                     callback_data:
                         "view_by_passport"
                 }
             ],
             [
                 {
-                    text: "🆔 Найти по ID",
+                    text:
+                        "🆔 Найти по ID",
                     callback_data:
                         "view_by_id"
                 }
             ],
             [
                 {
-                    text: "↩️ Назад",
+                    text:
+                        "↩️ Назад",
                     callback_data:
                         "view_data_back"
                 }
@@ -1730,7 +2027,8 @@ async function showViewDataMenu(
 ) {
     state.viewMode = null;
     state.viewPage = 0;
-    state.editingField = null;
+    state.editingField =
+        null;
     state.viewDate = null;
     state.viewRoute = null;
 
@@ -1826,7 +2124,8 @@ function getPassengerListText(
         Math.max(
             1,
             Math.ceil(
-                total / PAGE_SIZE
+                total /
+                    PAGE_SIZE
             )
         );
 
@@ -1837,12 +2136,14 @@ function getPassengerListText(
         );
 
     const start =
-        safePage * PAGE_SIZE;
+        safePage *
+        PAGE_SIZE;
 
     const pagePassengers =
         passengers.slice(
             start,
-            start + PAGE_SIZE
+            start +
+                PAGE_SIZE
         );
 
     let text =
@@ -1879,7 +2180,8 @@ function getPassengerListText(
                     ` ${passenger.patronymic}`;
             }
 
-            text += "\n";
+            text +=
+                "\n";
 
             text +=
                 `   🆔 ${
@@ -1929,12 +2231,14 @@ function getPassengerListKeyboard(
     const keyboard = [];
 
     const start =
-        page * PAGE_SIZE;
+        page *
+        PAGE_SIZE;
 
     const current =
         passengers.slice(
             start,
-            start + PAGE_SIZE
+            start +
+                PAGE_SIZE
         );
 
     current.forEach(
@@ -1962,7 +2266,8 @@ function getPassengerListKeyboard(
 
     if (page > 0) {
         navigation.push({
-            text: "⬅️",
+            text:
+                "⬅️",
             callback_data:
                 `${prefix}_page_${
                     page - 1
@@ -1975,7 +2280,8 @@ function getPassengerListKeyboard(
         totalPages - 1
     ) {
         navigation.push({
-            text: "➡️",
+            text:
+                "➡️",
             callback_data:
                 `${prefix}_page_${
                     page + 1
@@ -1983,7 +2289,9 @@ function getPassengerListKeyboard(
         });
     }
 
-    if (navigation.length) {
+    if (
+        navigation.length
+    ) {
         keyboard.push(
             navigation
         );
@@ -1991,7 +2299,8 @@ function getPassengerListKeyboard(
 
     keyboard.push([
         {
-            text: "↩️ Назад",
+            text:
+                "↩️ Назад",
             callback_data:
                 "view_data_menu"
         }
@@ -2073,21 +2382,24 @@ function getViewRouteKeyboard() {
         inline_keyboard: [
             [
                 {
-                    text: "ДШБ — ХРГ",
+                    text:
+                        "ДШБ — ХРГ",
                     callback_data:
                         "view_route_DSHB_XRG"
                 }
             ],
             [
                 {
-                    text: "ХРГ — ДШБ",
+                    text:
+                        "ХРГ — ДШБ",
                     callback_data:
                         "view_route_XRG_DSHB"
                 }
             ],
             [
                 {
-                    text: "↩️ Назад",
+                    text:
+                        "↩️ Назад",
                     callback_data:
                         "view_data_menu"
                 }
@@ -2197,7 +2509,8 @@ async function showViewedPassenger(
                 inline_keyboard: [
                     [
                         {
-                            text: "↩️ Назад",
+                            text:
+                                "↩️ Назад",
                             callback_data:
                                 "view_data_menu"
                         }
@@ -2231,21 +2544,24 @@ async function showViewedPassenger(
             inline_keyboard: [
                 [
                     {
-                        text: "✏️ Изменить данные",
+                        text:
+                            "✏️ Изменить данные",
                         callback_data:
                             "view_passenger_edit"
                     }
                 ],
                 [
                     {
-                        text: "↩️ Назад к списку",
+                        text:
+                            "↩️ Назад к списку",
                         callback_data:
                             "view_back_to_list"
                     }
                 ],
                 [
                     {
-                        text: "🏠 Главное меню",
+                        text:
+                            "🏠 Главное меню",
                         callback_data:
                             "view_main_menu"
                     }
@@ -2290,8 +2606,13 @@ async function handleTextMessage(
         return;
     }
 
-    if (text === "/start") {
-        states.delete(chatId);
+    if (
+        text ===
+        "/start"
+    ) {
+        states.delete(
+            chatId
+        );
 
         const result =
             await sendMessage(
@@ -2487,7 +2808,9 @@ async function handleTextMessage(
                     text.toLowerCase()
             );
 
-        if (!found.length) {
+        if (
+            !found.length
+        ) {
             await editMessage(
                 chatId,
                 state.messageId,
@@ -2496,7 +2819,8 @@ async function handleTextMessage(
                     inline_keyboard: [
                         [
                             {
-                                text: "↩️ Назад",
+                                text:
+                                    "↩️ Назад",
                                 callback_data:
                                     "view_data_menu"
                             }
@@ -2548,7 +2872,9 @@ async function handleTextMessage(
                     text.toLowerCase()
             );
 
-        if (!found.length) {
+        if (
+            !found.length
+        ) {
             await editMessage(
                 chatId,
                 state.messageId,
@@ -2557,7 +2883,8 @@ async function handleTextMessage(
                     inline_keyboard: [
                         [
                             {
-                                text: "↩️ Назад",
+                                text:
+                                    "↩️ Назад",
                                 callback_data:
                                     "view_data_menu"
                             }
@@ -2589,7 +2916,9 @@ async function handleTextMessage(
        EDIT TEXT FIELDS
     ========================================= */
 
-    if (state.editingField) {
+    if (
+        state.editingField
+    ) {
         const field =
             state.editingField;
 
@@ -2674,7 +3003,9 @@ async function handleTextMessage(
        REGISTRATION
     ========================================= */
 
-    if (state.step === 0) {
+    if (
+        state.step === 0
+    ) {
         state.data.surname =
             text;
 
@@ -2688,7 +3019,9 @@ async function handleTextMessage(
         return;
     }
 
-    if (state.step === 1) {
+    if (
+        state.step === 1
+    ) {
         state.data.name =
             text;
 
@@ -2702,7 +3035,9 @@ async function handleTextMessage(
         return;
     }
 
-    if (state.step === 2) {
+    if (
+        state.step === 2
+    ) {
         state.data.patronymic =
             text;
 
@@ -2716,7 +3051,9 @@ async function handleTextMessage(
         return;
     }
 
-    if (state.step === 4) {
+    if (
+        state.step === 4
+    ) {
         state.data.passport =
             text;
 
@@ -2730,7 +3067,9 @@ async function handleTextMessage(
         return;
     }
 
-    if (state.step === 6) {
+    if (
+        state.step === 6
+    ) {
         const contact =
             validateTajikPhone(
                 text
@@ -2781,6 +3120,10 @@ async function handleCallbackQuery(
 
     state.messageId =
         messageId;
+
+    console.log(
+        `🔘 Callback: ${data}`
+    );
 
     await answerCallbackQuery(
         callbackQuery.id
@@ -2848,76 +3191,84 @@ async function handleCallbackQuery(
         data ===
         "main_statistics"
     ) {
-        const passengers =
-            await getPassengerObjects();
+        try {
+            const passengers =
+                await getPassengerObjects();
 
-        const active =
-            passengers.filter(
-                p =>
-                    p.status !==
-                    "Отменен"
-            );
+            const booked =
+                passengers.filter(
+                    p =>
+                        p.status ===
+                        "Забронирован"
+                ).length;
 
-        const booked =
-            passengers.filter(
-                p =>
-                    p.status ===
-                    "Забронирован"
-            ).length;
+            const confirmed =
+                passengers.filter(
+                    p =>
+                        p.status ===
+                        "Подтвержден"
+                ).length;
 
-        const confirmed =
-            passengers.filter(
-                p =>
-                    p.status ===
-                    "Подтвержден"
-            ).length;
+            const cancelled =
+                passengers.filter(
+                    p =>
+                        p.status ===
+                        "Отменен"
+                ).length;
 
-        const cancelled =
-            passengers.filter(
-                p =>
-                    p.status ===
-                    "Отменен"
-            ).length;
+            const active =
+                passengers.filter(
+                    p =>
+                        p.status !==
+                        "Отменен"
+                );
 
-        const dshbXrg =
-            active.filter(
-                p =>
-                    p.route ===
-                    "ДШБ — ХРГ"
-            ).length;
+            const dshbXrg =
+                active.filter(
+                    p =>
+                        p.route ===
+                        "ДШБ — ХРГ"
+                ).length;
 
-        const xrgDshb =
-            active.filter(
-                p =>
-                    p.route ===
-                    "ХРГ — ДШБ"
-            ).length;
+            const xrgDshb =
+                active.filter(
+                    p =>
+                        p.route ===
+                        "ХРГ — ДШБ"
+                ).length;
 
-        const text =
-            "📊 Статистика\n\n" +
-            `👤 Всего пассажиров: ${passengers.length}\n` +
-            `🟢 Подтверждено: ${confirmed}\n` +
-            `🟡 Забронировано: ${booked}\n` +
-            `🔴 Отменено: ${cancelled}\n\n` +
-            `✈️ ДШБ — ХРГ: ${dshbXrg}\n` +
-            `✈️ ХРГ — ДШБ: ${xrgDshb}`;
+            const text =
+                "📊 Статистика\n\n" +
+                `👤 Всего пассажиров: ${passengers.length}\n` +
+                `🟢 Подтверждено: ${confirmed}\n` +
+                `🟡 Забронировано: ${booked}\n` +
+                `🔴 Отменено: ${cancelled}\n\n` +
+                `✈️ ДШБ — ХРГ: ${dshbXrg}\n` +
+                `✈️ ХРГ — ДШБ: ${xrgDshb}`;
 
-        await editMessage(
-            chatId,
-            messageId,
-            text,
-            {
-                inline_keyboard: [
-                    [
-                        {
-                            text: "↩️ Назад",
-                            callback_data:
-                                "main_menu_back"
-                        }
+            await editMessage(
+                chatId,
+                messageId,
+                text,
+                {
+                    inline_keyboard: [
+                        [
+                            {
+                                text:
+                                    "↩️ Назад",
+                                callback_data:
+                                    "main_menu_back"
+                            }
+                        ]
                     ]
-                ]
-            }
-        );
+                }
+            );
+        } catch (error) {
+            console.error(
+                "❌ Ошибка статистики:",
+                error.message
+            );
+        }
 
         return;
     }
@@ -3153,6 +3504,9 @@ async function handleCallbackQuery(
                 )
             );
 
+        state.viewPage =
+            page;
+
         await editMessage(
             chatId,
             messageId,
@@ -3170,9 +3524,6 @@ async function handleCallbackQuery(
                 "routeview"
             )
         );
-
-        state.viewPage =
-            page;
 
         return;
     }
@@ -3383,7 +3734,8 @@ async function handleCallbackQuery(
 
         if (
             base === "birth" &&
-            selectedDate > today
+            selectedDate >
+                today
         ) {
             await answerCallbackQuery(
                 callbackQuery.id,
@@ -3394,8 +3746,16 @@ async function handleCallbackQuery(
         }
 
         const dateString =
-            `${String(day).padStart(2, "0")}.` +
-            `${String(month + 1).padStart(2, "0")}.` +
+            `${String(day).padStart(
+                2,
+                "0"
+            )}.` +
+            `${String(
+                month + 1
+            ).padStart(
+                2,
+                "0"
+            )}.` +
             `${year}`;
 
 
@@ -3502,7 +3862,8 @@ async function handleCallbackQuery(
                             inline_keyboard: [
                                 [
                                     {
-                                        text: "↩️ Назад",
+                                        text:
+                                            "↩️ Назад",
                                         callback_data:
                                             "edit_back"
                                     }
@@ -3909,8 +4270,6 @@ async function handleCallbackQuery(
 
     /* =========================================
        EDIT MENU
-       ВАЖНО: ЭТОТ БЛОК ИДЁТ
-       ДО REGISTRATION ROUTE/STATUS
     ========================================= */
 
     if (
@@ -3963,7 +4322,6 @@ async function handleCallbackQuery(
 
     /* =========================================
        EDIT MENU BACK
-       ГЛАВНАЯ ИСПРАВЛЕННАЯ КНОПКА
     ========================================= */
 
     if (
@@ -4277,21 +4635,24 @@ async function handleCallbackQuery(
                 inline_keyboard: [
                     [
                         {
-                            text: "ДШБ — ХРГ",
+                            text:
+                                "ДШБ — ХРГ",
                             callback_data:
                                 "edit_route_DSHB_XRG"
                         }
                     ],
                     [
                         {
-                            text: "ХРГ — ДШБ",
+                            text:
+                                "ХРГ — ДШБ",
                             callback_data:
                                 "edit_route_XRG_DSHB"
                         }
                     ],
                     [
                         {
-                            text: "↩️ Назад",
+                            text:
+                                "↩️ Назад",
                             callback_data:
                                 "edit_back"
                         }
@@ -4338,7 +4699,8 @@ async function handleCallbackQuery(
                         inline_keyboard: [
                             [
                                 {
-                                    text: "↩️ Назад",
+                                    text:
+                                        "↩️ Назад",
                                     callback_data:
                                         "edit_back"
                                 }
@@ -4402,7 +4764,8 @@ async function handleCallbackQuery(
                         inline_keyboard: [
                             [
                                 {
-                                    text: "↩️ Назад",
+                                    text:
+                                        "↩️ Назад",
                                     callback_data:
                                         "edit_back"
                                 }
@@ -4451,28 +4814,32 @@ async function handleCallbackQuery(
                 inline_keyboard: [
                     [
                         {
-                            text: "Забронирован",
+                            text:
+                                "Забронирован",
                             callback_data:
                                 "edit_status_booked"
                         }
                     ],
                     [
                         {
-                            text: "Подтвержден",
+                            text:
+                                "Подтвержден",
                             callback_data:
                                 "edit_status_confirmed"
                         }
                     ],
                     [
                         {
-                            text: "Отменен",
+                            text:
+                                "Отменен",
                             callback_data:
                                 "edit_status_cancelled"
                         }
                     ],
                     [
                         {
-                            text: "↩️ Назад",
+                            text:
+                                "↩️ Назад",
                             callback_data:
                                 "edit_back"
                         }
@@ -4515,7 +4882,8 @@ async function handleCallbackQuery(
                     inline_keyboard: [
                         [
                             {
-                                text: "↩️ Назад",
+                                text:
+                                    "↩️ Назад",
                                 callback_data:
                                     "edit_back"
                             }
@@ -4574,7 +4942,8 @@ async function handleCallbackQuery(
                     inline_keyboard: [
                         [
                             {
-                                text: "↩️ Назад",
+                                text:
+                                    "↩️ Назад",
                                 callback_data:
                                     "edit_back"
                             }
@@ -4630,7 +4999,6 @@ async function handleCallbackQuery(
 
     /* =========================================
        REGISTRATION ROUTE
-       ЭТОТ БЛОК ОСТАЁТСЯ ПОСЛЕ EDIT
     ========================================= */
 
     if (
@@ -4697,6 +5065,11 @@ async function handleCallbackQuery(
                 "status_cancelled"
         )
     ) {
+        console.log(
+            "🟢 Выбран статус:",
+            data
+        );
+
         if (
             data ===
             "status_booked"
@@ -4720,6 +5093,13 @@ async function handleCallbackQuery(
             state.data.status =
                 "Отменен";
         }
+
+        console.log(
+            "📋 State перед finishRegistration:",
+            JSON.stringify(
+                state.data
+            )
+        );
 
         await finishRegistration(
             chatId,
@@ -4756,7 +5136,10 @@ async function handleCallbackQuery(
 
 app.post(
     "/telegram/webhook",
-    async (req, res) => {
+    async (
+        req,
+        res
+    ) => {
         const incomingSecret =
             req.headers[
                 "x-telegram-bot-api-secret-token"
@@ -4830,7 +5213,10 @@ app.post(
 
 app.get(
     "/",
-    (req, res) => {
+    (
+        req,
+        res
+    ) => {
         res.status(200).send(
             "KMRN Passenger Bot is running"
         );
