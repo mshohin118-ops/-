@@ -151,13 +151,10 @@ async function editMessage(
             }
     };
 
-    const result =
-        await telegramRequest(
-            "editMessageText",
-            body
-        );
-
-    return result;
+    return telegramRequest(
+        "editMessageText",
+        body
+    );
 }
 
 async function answerCallbackQuery(
@@ -208,7 +205,7 @@ async function deleteUserMessage(
 
 
 /* =========================================================
-   GOOGLE SHEETS
+   GOOGLE
 ========================================================= */
 
 function getGoogleAuth() {
@@ -227,7 +224,8 @@ function getGoogleAuth() {
         null,
         GOOGLE_PRIVATE_KEY,
         [
-            "https://www.googleapis.com/auth/spreadsheets"
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/drive.readonly"
         ]
     );
 }
@@ -238,6 +236,16 @@ async function getSheets() {
 
     return google.sheets({
         version: "v4",
+        auth
+    });
+}
+
+async function getDrive() {
+    const auth =
+        getGoogleAuth();
+
+    return google.drive({
+        version: "v3",
         auth
     });
 }
@@ -298,6 +306,106 @@ async function getAllPassengers() {
     return (
         result.data.values || []
     );
+}
+
+
+/* =========================================================
+   EXPORT EXCEL
+========================================================= */
+
+async function exportGoogleSheetToExcel() {
+    console.log(
+        "📥 Начинаем формирование Excel..."
+    );
+
+    const drive =
+        await getDrive();
+
+    console.log(
+        "✅ Google Drive API подключён"
+    );
+
+    const response =
+        await drive.files.export(
+            {
+                fileId:
+                    SPREADSHEET_ID,
+
+                mimeType:
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            },
+            {
+                responseType:
+                    "arraybuffer"
+            }
+        );
+
+    console.log(
+        "✅ Excel-файл успешно сформирован"
+    );
+
+    return Buffer.from(
+        response.data
+    );
+}
+
+async function sendExcelFile(
+    chatId,
+    excelBuffer
+) {
+    console.log(
+        "📤 Отправляем Excel в Telegram..."
+    );
+
+    const formData =
+        new FormData();
+
+    formData.append(
+        "chat_id",
+        String(chatId)
+    );
+
+    formData.append(
+        "document",
+        new Blob(
+            [excelBuffer],
+            {
+                type:
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            }
+        ),
+        "Пассажиры.xlsx"
+    );
+
+    const response =
+        await fetch(
+            `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument`,
+            {
+                method: "POST",
+                body: formData
+            }
+        );
+
+    const result =
+        await response.json();
+
+    if (!result.ok) {
+        console.error(
+            "❌ Ошибка отправки Excel:",
+            result
+        );
+
+        throw new Error(
+            result.description ||
+            "Ошибка отправки Excel"
+        );
+    }
+
+    console.log(
+        "✅ Excel отправлен пользователю"
+    );
+
+    return result;
 }
 
 
@@ -464,6 +572,14 @@ function getMainMenuKeyboard() {
                         "📊 Статистика",
                     callback_data:
                         "main_statistics"
+                }
+            ],
+            [
+                {
+                    text:
+                        "📥 Скачать Excel",
+                    callback_data:
+                        "main_export_excel"
                 }
             ]
         ]
@@ -3272,6 +3388,81 @@ async function handleCallbackQuery(
 
         return;
     }
+
+
+    /* =========================================
+       EXPORT EXCEL
+    ========================================= */
+
+    if (
+        data ===
+        "main_export_excel"
+    ) {
+        try {
+            await answerCallbackQuery(
+                callbackQuery.id,
+                "⏳ Формирую Excel..."
+            );
+
+            await editMessage(
+                chatId,
+                messageId,
+                "📥 Формирую Excel-файл...\n\nПожалуйста, подождите."
+            );
+
+            const excelBuffer =
+                await exportGoogleSheetToExcel();
+
+            await sendExcelFile(
+                chatId,
+                excelBuffer
+            );
+
+            await editMessage(
+                chatId,
+                messageId,
+                "✅ Excel-файл успешно отправлен.",
+                {
+                    inline_keyboard: [
+                        [
+                            {
+                                text:
+                                    "🏠 Главное меню",
+                                callback_data:
+                                    "main_menu_back"
+                            }
+                        ]
+                    ]
+                }
+            );
+        } catch (error) {
+            console.error(
+                "❌ ОШИБКА ВЫГРУЗКИ EXCEL:",
+                error
+            );
+
+            await editMessage(
+                chatId,
+                messageId,
+                "❌ Не удалось выгрузить Excel.\n\nПроверьте, что Google Drive API включён и сервисный аккаунт имеет доступ к таблице.",
+                {
+                    inline_keyboard: [
+                        [
+                            {
+                                text:
+                                    "↩️ Главное меню",
+                                callback_data:
+                                    "main_menu_back"
+                            }
+                        ]
+                    ]
+                }
+            );
+        }
+
+        return;
+    }
+
 
     if (
         data ===
