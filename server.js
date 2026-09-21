@@ -258,17 +258,7 @@ function getCalendarTitle(type, level) {
 
     if (type === "flight") {
 
-        if (level === "year") {
-            return "✈️ Выберите год рейса:";
-        }
-
-        if (level === "month") {
-            return "✈️ Выберите месяц рейса:";
-        }
-
-        if (level === "day") {
-            return "✈️ Выберите день рейса:";
-        }
+        return "📅 Выберите дату рейса:";
     }
 
 
@@ -553,11 +543,9 @@ async function showDays(
         firstDay.getDay();
 
 
-    // JavaScript:
     // Sunday = 0
     // Monday = 1
-    // ...
-    // Convert to Monday = 0
+    // Переводим на Monday = 0
     startDay =
         (startDay + 6) % 7;
 
@@ -613,7 +601,8 @@ async function showDays(
         let disabled = false;
 
 
-        // Для рождения нельзя выбирать будущую дату
+        // Для рождения нельзя выбирать
+        // будущую дату
         if (type === "birth") {
 
             if (currentDate > today) {
@@ -717,6 +706,7 @@ async function showBirthCalendar(
                 []
             );
 
+
         if (
             result &&
             result.result
@@ -766,9 +756,10 @@ async function showFlightCalendar(
         const result =
             await sendInlineMessage(
                 chatId,
-                "✈️ Выберите год рейса:",
+                "📅 Выберите дату рейса:",
                 []
             );
+
 
         if (
             result &&
@@ -826,7 +817,8 @@ async function showCitizenship(
         ],
         [
             {
-                text: "↩️ Изменить предыдущий шаг",
+                text:
+                    "↩️ Изменить предыдущий шаг",
                 callback_data:
                     "previous_step"
             }
@@ -855,7 +847,7 @@ async function showCitizenship(
 
 
 // =====================================================
-// ROUTES
+// ROUTE OCCUPANCY
 // =====================================================
 
 async function getRouteOccupancy(
@@ -973,6 +965,10 @@ async function checkRouteAvailability(
     };
 }
 
+
+// =====================================================
+// ROUTES
+// =====================================================
 
 async function showRoutes(
     chatId,
@@ -2371,6 +2367,7 @@ async function handleCallbackQuery(
                 "❌ На этом маршруте нет свободных мест."
             );
 
+
             await showRoutes(
                 chatId,
                 state.data.flightDate,
@@ -2792,8 +2789,7 @@ async function handleTextMessage(
         state.step = 5;
 
 
-        // НОВОЕ:
-        // вместо ручного ввода показываем
+        // После паспорта показываем
         // выбор гражданства
         await showCitizenship(
             chatId
