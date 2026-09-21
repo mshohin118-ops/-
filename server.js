@@ -6,33 +6,19 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 10000;
 
-// ==========================================
-// ENV
-// ==========================================
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const GOOGLE_CLIENT_EMAIL = process.env.GOOGLE_CLIENT_EMAIL;
+const GOOGLE_PRIVATE_KEY = process.env.GOOGLE_PRIVATE_KEY;
+const SPREADSHEET_ID = process.env.GOOGLE_SHEET_ID;
 
-const TELEGRAM_BOT_TOKEN =
-    process.env.TELEGRAM_BOT_TOKEN;
-
-const GOOGLE_CLIENT_EMAIL =
-    process.env.GOOGLE_CLIENT_EMAIL;
-
-const GOOGLE_PRIVATE_KEY =
-    process.env.GOOGLE_PRIVATE_KEY;
-
-const SPREADSHEET_ID =
-    process.env.GOOGLE_SHEET_ID;
-
-const TELEGRAM_WEBHOOK_SECRET =
-    process.env.TELEGRAM_WEBHOOK_SECRET;
-
-const PUBLIC_URL =
-    process.env.PUBLIC_URL;
+const TELEGRAM_WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET;
+const PUBLIC_URL = process.env.PUBLIC_URL;
 
 const MAX_SEATS = 19;
 
-// ==========================================
+// ======================================================
 // GOOGLE SHEETS
-// ==========================================
+// ======================================================
 
 const auth = new google.auth.GoogleAuth({
     credentials: {
@@ -51,261 +37,177 @@ const sheets = google.sheets({
     auth
 });
 
-// ==========================================
-// USER STATES
-// ==========================================
+// ======================================================
+// TELEGRAM REQUEST
+// ======================================================
 
-const userStates = {};
-const lastPassengers = {};
-
-// ==========================================
-// ПРОГРЕСС РЕГИСТРАЦИИ
-// ==========================================
-
-const TOTAL_STEPS = 9;
-
-function getProgressText(step) {
-    const currentStep = step + 1;
-    const remaining = Math.max(
-        0,
-        TOTAL_STEPS - currentStep
-    );
-
-    return (
-        `📋 Шаг ${currentStep} из ${TOTAL_STEPS}\n` +
-        `⏳ Осталось: ${remaining} ${getStepWord(remaining)}`
-    );
-}
-
-function getStepWord(number) {
-    if (
-        number % 10 === 1 &&
-        number % 100 !== 11
-    ) {
-        return "шаг";
-    }
-
-    if (
-        number % 10 >= 2 &&
-        number % 10 <= 4 &&
-        (
-            number % 100 < 10 ||
-            number % 100 >= 20
-        )
-    ) {
-        return "шага";
-    }
-
-    return "шагов";
-}
-
-// ==========================================
-// TELEGRAM API
-// ==========================================
-
-async function telegramRequest(
-    method,
-    data
-) {
+async function telegramRequest(method, body = {}) {
     const response = await fetch(
         `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/${method}`,
         {
             method: "POST",
             headers: {
-                "Content-Type":
-                    "application/json"
+                "Content-Type": "application/json"
             },
-            body: JSON.stringify(data)
+            body: JSON.stringify(body)
         }
     );
 
     return await response.json();
 }
 
-// ==========================================
+// ======================================================
 // SEND MESSAGE
-// ==========================================
+// ======================================================
 
-async function sendMessage(
-    chatId,
-    text,
-    reply_markup = undefined
-) {
-    const data = {
+async function sendMessage(chatId, text) {
+    return await telegramRequest("sendMessage", {
         chat_id: chatId,
-        text: text
-    };
-
-    if (reply_markup) {
-        data.reply_markup =
-            reply_markup;
-    }
-
-    return await telegramRequest(
-        "sendMessage",
-        data
-    );
+        text
+    });
 }
 
-// ==========================================
-// SEND INLINE MESSAGE
-// ==========================================
-
-async function sendInlineMessage(
-    chatId,
-    text,
-    buttons
-) {
-    return await telegramRequest(
-        "sendMessage",
-        {
-            chat_id: chatId,
-            text: text,
-            reply_markup: {
-                inline_keyboard:
-                    buttons
-            }
+async function sendInlineMessage(chatId, text, keyboard) {
+    return await telegramRequest("sendMessage", {
+        chat_id: chatId,
+        text,
+        reply_markup: {
+            inline_keyboard: keyboard
         }
-    );
+    });
 }
-
-// ==========================================
-// EDIT INLINE MESSAGE
-// ==========================================
 
 async function editInlineMessage(
     chatId,
     messageId,
     text,
-    buttons
+    keyboard
 ) {
-    const data = {
+    return await telegramRequest("editMessageText", {
         chat_id: chatId,
         message_id: messageId,
-        text: text
-    };
-
-    if (buttons) {
-        data.reply_markup = {
-            inline_keyboard:
-                buttons
-        };
-    } else {
-        data.reply_markup = {
-            inline_keyboard: []
-        };
-    }
-
-    return await telegramRequest(
-        "editMessageText",
-        data
-    );
-}
-
-// ==========================================
-// CALLBACK
-// ==========================================
-
-async function answerCallbackQuery(
-    callbackQueryId
-) {
-    return await telegramRequest(
-        "answerCallbackQuery",
-        {
-            callback_query_id:
-                callbackQueryId
+        text,
+        reply_markup: {
+            inline_keyboard: keyboard
         }
-    );
+    });
 }
 
-// ==========================================
-// MAIN MENU
-// ==========================================
+async function answerCallbackQuery(callbackQueryId) {
+    return await telegramRequest("answerCallbackQuery", {
+        callback_query_id: callbackQueryId
+    });
+}
 
-async function showMainMenu(
-    chatId
-) {
-    userStates[chatId] = {
-        step: 0,
-        data: []
-    };
+// ======================================================
+// STATES
+// ======================================================
+
+const userStates = {};
+
+// ======================================================
+// MAIN MENU
+// ======================================================
+
+async function showMainMenu(chatId) {
+    const keyboard = [
+        [
+            {
+                text: "➕ Добавить пассажира",
+                callback_data: "main_add_passenger"
+            }
+        ],
+        [
+            {
+                text: "👤 Посмотреть данные",
+                callback_data: "main_view_data"
+            }
+        ],
+        [
+            {
+                text: "🔎 Найти пассажира",
+                callback_data: "main_find_passenger"
+            }
+        ],
+        [
+            {
+                text: "✈️ Пассажиры рейса",
+                callback_data: "main_flight_passengers"
+            }
+        ],
+        [
+            {
+                text: "📊 Статистика",
+                callback_data: "main_statistics"
+            }
+        ]
+    ];
 
     await sendInlineMessage(
         chatId,
-        "🏠 Главное меню:",
-        [
-            [
-                {
-                    text:
-                        "➕ Добавить пассажира",
-                    callback_data:
-                        "main_add_passenger"
-                }
-            ],
-            [
-                {
-                    text:
-                        "👤 Посмотреть данные",
-                    callback_data:
-                        "main_view_data"
-                }
-            ],
-            [
-                {
-                    text:
-                        "🔎 Найти пассажира",
-                    callback_data:
-                        "main_find_passenger"
-                }
-            ],
-            [
-                {
-                    text:
-                        "✈️ Пассажиры рейса",
-                    callback_data:
-                        "main_flight_passengers"
-                }
-            ],
-            [
-                {
-                    text:
-                        "📊 Статистика",
-                    callback_data:
-                        "main_statistics"
-                }
-            ]
-        ]
+        "🏠 Главное меню",
+        keyboard
     );
 }
 
-// ==========================================
+// ======================================================
 // START REGISTRATION
-// ==========================================
+// ======================================================
 
-async function startPassengerRegistration(
-    chatId
-) {
+async function startPassengerRegistration(chatId) {
     userStates[chatId] = {
         step: 0,
-        data: []
+        data: {},
+        calendarType: null,
+        calendarPage: 0,
+        editingField: null,
+        rowNumber: null
     };
 
     await sendMessage(
         chatId,
-        `${getProgressText(0)}\n\n` +
-        "Введите фамилию пассажира:"
+        "Введите фамилию:"
     );
 }
 
-// ==========================================
+// ======================================================
 // GOOGLE SHEETS DATA
-// ==========================================
+// ======================================================
 
 async function getSheetData() {
+    const spreadsheet = await sheets.spreadsheets.get({
+        spreadsheetId: SPREADSHEET_ID
+    });
+
+    const firstSheet = spreadsheet.data.sheets[0];
+
+    if (!firstSheet) {
+        throw new Error("В таблице нет листов");
+    }
+
+    const sheetTitle =
+        firstSheet.properties.title;
+
+    const response =
+        await sheets.spreadsheets.values.get({
+            spreadsheetId: SPREADSHEET_ID,
+            range: `${sheetTitle}!A:J`
+        });
+
+    return {
+        sheetTitle,
+        values: response.data.values || []
+    };
+}
+
+// ======================================================
+// SAVE NEW PASSENGER
+// ======================================================
+
+async function savePassenger(data) {
     const spreadsheet =
         await sheets.spreadsheets.get({
-            spreadsheetId:
-                SPREADSHEET_ID
+            spreadsheetId: SPREADSHEET_ID
         });
 
     const firstSheet =
@@ -313,39 +215,81 @@ async function getSheetData() {
 
     if (!firstSheet) {
         throw new Error(
-            "В Google Sheets не найден лист"
+            "В таблице нет листов"
         );
     }
 
     const sheetTitle =
         firstSheet.properties.title;
 
+    const passengerId =
+        "P" +
+        Date.now().toString().slice(-8);
+
+    const values = [
+        passengerId,
+        data.surname || "",
+        data.name || "",
+        data.patronymic || "",
+        data.birthDate || "",
+        data.passport || "",
+        data.citizenship || "",
+        data.flightDate || "",
+        data.route || "",
+        data.status || ""
+    ];
+
     const result =
-        await sheets.spreadsheets.values.get({
-            spreadsheetId:
-                SPREADSHEET_ID,
-            range:
-                `${sheetTitle}!A:J`
+        await sheets.spreadsheets.values.append({
+            spreadsheetId: SPREADSHEET_ID,
+            range: `${sheetTitle}!A:J`,
+            valueInputOption: "USER_ENTERED",
+            insertDataOption: "INSERT_ROWS",
+            requestBody: {
+                values: [values]
+            }
         });
 
+    let rowNumber = null;
+
+    if (
+        result.data &&
+        result.data.updates &&
+        result.data.updates.updatedRange
+    ) {
+        const match =
+            result.data.updates.updatedRange.match(
+                /![A-Z]+(\d+):/
+            );
+
+        if (match) {
+            rowNumber = Number(match[1]);
+        }
+    }
+
     return {
-        sheetTitle,
-        rows:
-            result.data.values || []
+        passengerId,
+        rowNumber
     };
 }
 
-// ==========================================
-// SAVE PASSENGER
-// ==========================================
+// ======================================================
+// UPDATE EXISTING PASSENGER
+// ======================================================
 
-async function savePassenger(
-    passenger
+async function updatePassenger(
+    rowNumber,
+    data
 ) {
+    if (!rowNumber) {
+        throw new Error(
+            "Не найден номер строки пассажира"
+        );
+    }
+
     const spreadsheet =
         await sheets.spreadsheets.get({
-            spreadsheetId:
-                SPREADSHEET_ID
+            spreadsheetId: SPREADSHEET_ID
         });
 
     const firstSheet =
@@ -353,7 +297,7 @@ async function savePassenger(
 
     if (!firstSheet) {
         throw new Error(
-            "В Google Sheets не найден лист"
+            "В таблице нет листов"
         );
     }
 
@@ -361,57 +305,54 @@ async function savePassenger(
         firstSheet.properties.title;
 
     const values = [
-        passenger.id,
-        passenger.surname,
-        passenger.name,
-        passenger.patronymic,
-        passenger.birthDate,
-        passenger.passport,
-        passenger.citizenship,
-        passenger.flightDate,
-        passenger.route,
-        passenger.status
+        data.passengerId || "",
+        data.surname || "",
+        data.name || "",
+        data.patronymic || "",
+        data.birthDate || "",
+        data.passport || "",
+        data.citizenship || "",
+        data.flightDate || "",
+        data.route || "",
+        data.status || ""
     ];
 
-    await sheets.spreadsheets.values.append({
-        spreadsheetId:
-            SPREADSHEET_ID,
-
+    await sheets.spreadsheets.values.update({
+        spreadsheetId: SPREADSHEET_ID,
         range:
-            `${sheetTitle}!A:J`,
-
-        valueInputOption:
-            "USER_ENTERED",
-
+            `${sheetTitle}!A${rowNumber}:J${rowNumber}`,
+        valueInputOption: "USER_ENTERED",
         requestBody: {
             values: [values]
         }
     });
 }
 
-// ==========================================
-// OCCUPANCY
-// ==========================================
+// ======================================================
+// ROUTE OCCUPANCY
+// ======================================================
 
 async function getRouteOccupancy(
     flightDate,
-    route
+    route,
+    excludeRowNumber = null
 ) {
-    const { rows } =
+    const { values } =
         await getSheetData();
-
-    if (rows.length <= 1) {
-        return 0;
-    }
 
     let count = 0;
 
-    for (
-        let i = 1;
-        i < rows.length;
-        i++
-    ) {
-        const row = rows[i];
+    for (let i = 1; i < values.length; i++) {
+        const row = values[i];
+
+        const rowNumber = i + 1;
+
+        if (
+            excludeRowNumber &&
+            rowNumber === excludeRowNumber
+        ) {
+            continue;
+        }
 
         const passengerFlightDate =
             row[7] || "";
@@ -423,12 +364,9 @@ async function getRouteOccupancy(
             row[9] || "";
 
         if (
-            passengerFlightDate ===
-                flightDate &&
-            passengerRoute ===
-                route &&
-            passengerStatus !==
-                "Отменен"
+            passengerFlightDate === flightDate &&
+            passengerRoute === route &&
+            passengerStatus !== "Отменен"
         ) {
             count++;
         }
@@ -437,39 +375,57 @@ async function getRouteOccupancy(
     return count;
 }
 
-// ==========================================
-// AVAILABILITY
-// ==========================================
+// ======================================================
+// CHECK ROUTE
+// ======================================================
 
 async function checkRouteAvailability(
     flightDate,
-    route
+    route,
+    excludeRowNumber = null
 ) {
-    const occupancy =
+    const occupied =
         await getRouteOccupancy(
             flightDate,
-            route
+            route,
+            excludeRowNumber
         );
 
     return {
-        occupancy,
-        freeSeats:
+        occupied,
+        free:
             Math.max(
                 0,
-                MAX_SEATS -
-                    occupancy
+                MAX_SEATS - occupied
             ),
-        isFull:
-            occupancy >=
-            MAX_SEATS
+        available:
+            occupied < MAX_SEATS
     };
 }
 
-// ==========================================
-// CALENDAR
-// ==========================================
+// ======================================================
+// DATE FORMAT
+// ======================================================
 
-const monthNames = [
+function formatDate(
+    day,
+    month,
+    year
+) {
+    return (
+        String(day).padStart(2, "0") +
+        "." +
+        String(month + 1).padStart(2, "0") +
+        "." +
+        year
+    );
+}
+
+// ======================================================
+// MONTHS
+// ======================================================
+
+const MONTHS = [
     "Январь",
     "Февраль",
     "Март",
@@ -484,7 +440,7 @@ const monthNames = [
     "Декабрь"
 ];
 
-const weekDays = [
+const WEEKDAYS = [
     "Пн",
     "Вт",
     "Ср",
@@ -494,35 +450,56 @@ const weekDays = [
     "Вс"
 ];
 
-// ==========================================
-// CALENDAR YEARS
-// type = birth / flight
-// ==========================================
+// ======================================================
+// PREVIOUS STEP BUTTON
+// ======================================================
+
+function previousStepKeyboard(step) {
+    if (step <= 0) {
+        return [];
+    }
+
+    return [
+        [
+            {
+                text: "↩️ Изменить предыдущий шаг",
+                callback_data: "previous_step"
+            }
+        ]
+    ];
+}
+
+// ======================================================
+// YEAR CALENDAR
+// ======================================================
 
 async function showYears(
     chatId,
     messageId,
-    currentPage = 0,
-    type = "birth"
+    type,
+    page = 0
 ) {
+    const now = new Date();
+
     const currentYear =
-        new Date().getFullYear();
+        now.getFullYear();
 
-    const maxYear =
-        currentYear;
+    const yearsPerPage = 6;
 
-    const minYear =
-        type === "birth"
-            ? 1940
-            : currentYear;
+    let minYear;
+    let maxYear;
 
-    const yearsPerPage =
-        12;
+    if (type === "birth") {
+        minYear = 1940;
+        maxYear = currentYear;
+    } else {
+        minYear = currentYear;
+        maxYear = currentYear + 5;
+    }
 
     const startYear =
         maxYear -
-        currentPage *
-            yearsPerPage;
+        page * yearsPerPage;
 
     const endYear =
         Math.max(
@@ -532,7 +509,7 @@ async function showYears(
                 1
         );
 
-    const buttons = [];
+    const keyboard = [];
 
     let row = [];
 
@@ -542,170 +519,129 @@ async function showYears(
         year--
     ) {
         row.push({
-            text:
-                String(year),
-
+            text: String(year),
             callback_data:
-                `${type}_year_${year}`
+                `calendar_year:${type}:${year}`
         });
 
-        if (
-            row.length === 3
-        ) {
-            buttons.push(row);
+        if (row.length === 3) {
+            keyboard.push(row);
             row = [];
         }
     }
 
     if (row.length > 0) {
-        buttons.push(row);
+        keyboard.push(row);
     }
 
     const navigation = [];
 
-    if (
-        startYear -
-            yearsPerPage >=
-        minYear
-    ) {
+    if (endYear > minYear) {
         navigation.push({
-            text:
-                "⬅️ Ранее",
-
+            text: "⬅️ Старше",
             callback_data:
-                `${type}_years_${
-                    currentPage + 1
-                }`
+                `calendar_year_page:${type}:${page + 1}`
         });
     }
 
-    if (
-        currentPage > 0
-    ) {
+    if (page > 0) {
         navigation.push({
-            text:
-                "➡️ Позже",
-
+            text: "➡️ Новее",
             callback_data:
-                `${type}_years_${
-                    currentPage - 1
-                }`
+                `calendar_year_page:${type}:${page - 1}`
         });
     }
 
-    if (
-        navigation.length > 0
-    ) {
-        buttons.push(
-            navigation
-        );
+    if (navigation.length > 0) {
+        keyboard.push(navigation);
     }
 
-    const title =
-        type === "birth"
-            ? "📅 Выберите год рождения:"
-            : "✈️ Выберите год рейса:";
+    keyboard.push([
+        {
+            text: "↩️ Изменить предыдущий шаг",
+            callback_data:
+                "previous_step"
+        }
+    ]);
 
     await editInlineMessage(
         chatId,
         messageId,
-        `${getProgressText(
-            type === "birth"
-                ? 3
-                : 6
-        )}\n\n${title}`,
-        buttons
+        "📅 Выберите год:",
+        keyboard
     );
 }
 
-// ==========================================
-// MONTHS
-// ==========================================
+// ======================================================
+// MONTH CALENDAR
+// ======================================================
 
 async function showMonths(
     chatId,
     messageId,
-    year,
-    type = "birth"
+    type,
+    year
 ) {
-    const buttons = [];
+    const keyboard = [];
 
-    let row = [];
+    for (let i = 0; i < 12; i += 3) {
+        const row = [];
 
-    for (
-        let month = 0;
-        month < 12;
-        month++
-    ) {
-        row.push({
-            text:
-                monthNames[month],
+        for (let j = 0; j < 3; j++) {
+            const month = i + j;
 
-            callback_data:
-                `${type}_month_${year}_${month}`
-        });
-
-        if (
-            row.length === 3
-        ) {
-            buttons.push(row);
-            row = [];
+            row.push({
+                text: MONTHS[month],
+                callback_data:
+                    `calendar_month:${type}:${year}:${month}`
+            });
         }
+
+        keyboard.push(row);
     }
 
-    if (row.length > 0) {
-        buttons.push(row);
-    }
-
-    buttons.push([
+    keyboard.push([
         {
-            text:
-                "⬅️ Назад",
-
+            text: "⬅️ К годам",
             callback_data:
-                `${type}_back_years`
+                `calendar_back_years:${type}`
         }
     ]);
 
-    const progress =
-        type === "birth"
-            ? getProgressText(3)
-            : getProgressText(6);
-
-    const title =
-        type === "birth"
-            ? "Выберите месяц рождения:"
-            : "Выберите месяц рейса:";
+    keyboard.push([
+        {
+            text: "↩️ Изменить предыдущий шаг",
+            callback_data:
+                "previous_step"
+        }
+    ]);
 
     await editInlineMessage(
         chatId,
         messageId,
-        `${progress}\n\n📅 ${year} год\n${title}`,
-        buttons
+        `📅 ${year} год\n\nВыберите месяц:`,
+        keyboard
     );
 }
 
-// ==========================================
-// DAYS
-// ==========================================
+// ======================================================
+// DAYS CALENDAR
+// ======================================================
 
 async function showDays(
     chatId,
     messageId,
+    type,
     year,
-    month,
-    type = "birth"
+    month
 ) {
-    const buttons = [];
+    const keyboard = [];
 
-    buttons.push(
-        weekDays.map(
-            day => ({
-                text: day,
-                callback_data:
-                    "ignore"
-            })
-        )
+    keyboard.push(
+        WEEKDAYS.map(day => ({
+            text: day,
+            callback_data: "ignore"
+        }))
     );
 
     const firstDay =
@@ -713,16 +649,12 @@ async function showDays(
             year,
             month,
             1
-        );
+        ).getDay();
 
-    let dayOfWeek =
-        firstDay.getDay();
-
-    if (
-        dayOfWeek === 0
-    ) {
-        dayOfWeek = 7;
-    }
+    const mondayIndex =
+        firstDay === 0
+            ? 6
+            : firstDay - 1;
 
     const daysInMonth =
         new Date(
@@ -734,25 +666,24 @@ async function showDays(
     let row = [];
 
     for (
-        let i = 1;
-        i < dayOfWeek;
+        let i = 0;
+        i < mondayIndex;
         i++
     ) {
         row.push({
             text: " ",
-            callback_data:
-                "ignore"
+            callback_data: "ignore"
         });
     }
 
-    const today =
-        new Date();
+    const today = new Date();
 
-    // Для даты рождения
-    // нельзя выбирать будущее.
-    //
-    // Для даты рейса можно выбирать
-    // будущие даты.
+    today.setHours(
+        0,
+        0,
+        0,
+        0
+    );
 
     for (
         let day = 1;
@@ -766,451 +697,688 @@ async function showDays(
                 day
             );
 
+        selectedDate.setHours(
+            0,
+            0,
+            0,
+            0
+        );
+
         let disabled = false;
 
         if (
             type === "birth" &&
-            selectedDate >
-                today
+            selectedDate > today
         ) {
             disabled = true;
         }
 
-        row.push({
-            text:
-                String(day),
+        if (disabled) {
+            row.push({
+                text: "·",
+                callback_data: "ignore"
+            });
+        } else {
+            row.push({
+                text: String(day),
+                callback_data:
+                    `calendar_day:${type}:${year}:${month}:${day}`
+            });
+        }
 
-            callback_data:
-                disabled
-                    ? "ignore"
-                    : `${type}_day_${year}_${month}_${day}`
-        });
-
-        if (
-            row.length === 7
-        ) {
-            buttons.push(row);
+        if (row.length === 7) {
+            keyboard.push(row);
             row = [];
         }
     }
 
     if (row.length > 0) {
-        while (
-            row.length < 7
-        ) {
+        while (row.length < 7) {
             row.push({
                 text: " ",
-                callback_data:
-                    "ignore"
+                callback_data: "ignore"
             });
         }
 
-        buttons.push(row);
+        keyboard.push(row);
     }
 
-    buttons.push([
+    keyboard.push([
         {
-            text:
-                "⬅️ Назад",
-
+            text: "⬅️ К месяцам",
             callback_data:
-                `${type}_back_months_${year}`
+                `calendar_back_months:${type}:${year}`
         }
     ]);
 
-    const progress =
-        type === "birth"
-            ? getProgressText(3)
-            : getProgressText(6);
-
-    const title =
-        type === "birth"
-            ? "Выберите день рождения:"
-            : "Выберите дату рейса:";
+    keyboard.push([
+        {
+            text: "↩️ Изменить предыдущий шаг",
+            callback_data:
+                "previous_step"
+        }
+    ]);
 
     await editInlineMessage(
         chatId,
         messageId,
-        `${progress}\n\n📅 ${monthNames[month]} ${year}\n${title}`,
-        buttons
+        `📅 ${MONTHS[month]} ${year}\n\nВыберите день:`,
+        keyboard
     );
 }
 
-// ==========================================
+// ======================================================
 // BIRTH CALENDAR
-// ==========================================
+// ======================================================
 
 async function showBirthCalendar(
-    chatId
+    chatId,
+    existingMessageId = null
 ) {
-    const result =
-        await sendInlineMessage(
-            chatId,
-            `${getProgressText(
-                3
-            )}\n\n📅 Выберите год рождения:`,
-            []
-        );
+    const keyboard = [
+        [
+            {
+                text: "Загрузка...",
+                callback_data: "ignore"
+            }
+        ]
+    ];
 
-    if (
-        result &&
-        result.ok &&
-        result.result
-    ) {
+    let result;
+
+    if (existingMessageId) {
+        result =
+            await editInlineMessage(
+                chatId,
+                existingMessageId,
+                "📅 Выберите год:",
+                keyboard
+            );
+    } else {
+        result =
+            await sendInlineMessage(
+                chatId,
+                "📅 Выберите год:",
+                keyboard
+            );
+    }
+
+    const messageId =
+        existingMessageId ||
+        result.result?.message_id;
+
+    if (messageId) {
         await showYears(
             chatId,
-            result.result.message_id,
-            0,
-            "birth"
+            messageId,
+            "birth",
+            0
         );
     }
 }
 
-// ==========================================
-// FLIGHT DATE CALENDAR
-// ==========================================
+// ======================================================
+// FLIGHT CALENDAR
+// ======================================================
 
 async function showFlightCalendar(
-    chatId
+    chatId,
+    existingMessageId = null
 ) {
-    const result =
-        await sendInlineMessage(
-            chatId,
-            `${getProgressText(
-                6
-            )}\n\n✈️ Выберите год рейса:`,
-            []
-        );
+    const keyboard = [
+        [
+            {
+                text: "Загрузка...",
+                callback_data: "ignore"
+            }
+        ]
+    ];
 
-    if (
-        result &&
-        result.ok &&
-        result.result
-    ) {
+    let result;
+
+    if (existingMessageId) {
+        result =
+            await editInlineMessage(
+                chatId,
+                existingMessageId,
+                "📅 Выберите год:",
+                keyboard
+            );
+    } else {
+        result =
+            await sendInlineMessage(
+                chatId,
+                "📅 Выберите год:",
+                keyboard
+            );
+    }
+
+    const messageId =
+        existingMessageId ||
+        result.result?.message_id;
+
+    if (messageId) {
         await showYears(
             chatId,
-            result.result.message_id,
-            0,
-            "flight"
+            messageId,
+            "flight",
+            0
         );
     }
 }
 
-// ==========================================
+// ======================================================
 // ROUTES
-// ==========================================
+// ======================================================
 
 async function showRoutes(
-    chatId
+    chatId,
+    flightDate,
+    messageId = null,
+    editing = false
 ) {
-    const state =
-        userStates[chatId];
+    const routes = [
+        "ДШБ — ХРГ",
+        "ХРГ — ДШБ"
+    ];
 
-    if (!state) {
-        await showMainMenu(
-            chatId
-        );
+    const keyboard = [];
 
-        return;
-    }
-
-    const flightDate =
-        state.data[6];
-
-    const route1 =
-        "ДШБ — ХРГ";
-
-    const route2 =
-        "ХРГ — ДШБ";
-
-    const availability1 =
-        await checkRouteAvailability(
-            flightDate,
-            route1
-        );
-
-    const availability2 =
-        await checkRouteAvailability(
-            flightDate,
-            route2
-        );
-
-    const buttons = [];
-
-    if (
-        !availability1.isFull
-    ) {
-        buttons.push([
-            {
-                text:
-                    "✈️ ДШБ — ХРГ",
-
-                callback_data:
-                    "route_dsb_khr"
-            }
-        ]);
-    } else {
-        buttons.push([
-            {
-                text:
-                    "🚫 ДШБ — ХРГ (мест нет)",
-
-                callback_data:
-                    "route_full"
-            }
-        ]);
-    }
-
-    if (
-        !availability2.isFull
-    ) {
-        buttons.push([
-            {
-                text:
-                    "✈️ ХРГ — ДШБ",
-
-                callback_data:
-                    "route_khr_dsb"
-            }
-        ]);
-    } else {
-        buttons.push([
-            {
-                text:
-                    "🚫 ХРГ — ДШБ (мест нет)",
-
-                callback_data:
-                    "route_full"
-            }
-        ]);
-    }
-
-    await sendInlineMessage(
-        chatId,
-        `${getProgressText(
-            7
-        )}\n\n` +
-        `✈️ Выберите маршрут\n\n` +
-        `📅 Дата рейса: ${flightDate}`,
-        buttons
-    );
-}
-
-// ==========================================
-// STATUS
-// ==========================================
-
-async function showStatuses(
-    chatId
-) {
-    await sendInlineMessage(
-        chatId,
-        `${getProgressText(
-            8
-        )}\n\n` +
-        "📌 Выберите статус пассажира:",
-        [
-            [
-                {
-                    text:
-                        "✅ Подтвержден",
-
-                    callback_data:
-                        "status_confirmed"
-                }
-            ],
-            [
-                {
-                    text:
-                        "⏳ Ожидание",
-
-                    callback_data:
-                        "status_waiting"
-                }
-            ],
-            [
-                {
-                    text:
-                        "❌ Отменен",
-
-                    callback_data:
-                        "status_cancelled"
-                }
-            ]
-        ]
-    );
-}
-
-// ==========================================
-// ADD PASSENGER
-// ==========================================
-
-async function addPassenger(
-    chatId
-) {
-    const state =
-        userStates[chatId];
-
-    if (!state) {
-        await showMainMenu(
-            chatId
-        );
-
-        return;
-    }
-
-    const passenger = {
-        id:
-            String(chatId),
-
-        surname:
-            state.data[0],
-
-        name:
-            state.data[1],
-
-        patronymic:
-            state.data[2],
-
-        birthDate:
-            state.data[3],
-
-        passport:
-            state.data[4],
-
-        citizenship:
-            state.data[5],
-
-        flightDate:
-            state.data[6],
-
-        route:
-            state.data[7],
-
-        status:
-            state.data[8]
-    };
-
-    // ======================================
-    // FINAL CAPACITY CHECK
-    // ======================================
-
-    if (
-        passenger.status !==
-        "Отменен"
-    ) {
-        const availability =
+    for (const route of routes) {
+        const occupancy =
             await checkRouteAvailability(
-                passenger.flightDate,
-                passenger.route
+                flightDate,
+                route,
+                editing
+                    ? userStates[chatId]?.rowNumber
+                    : null
             );
 
-        if (
-            availability.isFull
-        ) {
-            await sendMessage(
-                chatId,
-                `❌ К сожалению, рейс уже заполнен.\n\n` +
-                `📅 Дата: ${passenger.flightDate}\n` +
-                `✈️ Маршрут: ${passenger.route}\n\n` +
-                `💺 Загрузка: ${availability.occupancy}/${MAX_SEATS}`
-            );
-
-            await showRoutes(
-                chatId
-            );
-
-            return;
+        if (occupancy.available) {
+            keyboard.push([
+                {
+                    text:
+                        `✈️ ${route} (${occupancy.occupied}/${MAX_SEATS})`,
+                    callback_data:
+                        `route_select:${route}`
+                }
+            ]);
+        } else {
+            keyboard.push([
+                {
+                    text:
+                        `🔴 ${route} (Мест нет)`,
+                    callback_data:
+                        "route_full"
+                }
+            ]);
         }
     }
 
-    // ======================================
-    // SAVE
-    // ======================================
+    keyboard.push([
+        {
+            text: "↩️ Изменить предыдущий шаг",
+            callback_data:
+                "previous_step"
+        }
+    ]);
 
-    await savePassenger(
-        passenger
-    );
+    const text =
+        `📅 Дата рейса: ${flightDate}\n\n` +
+        "✈️ Выберите маршрут:";
 
-    lastPassengers[chatId] =
-        passenger;
-
-    const occupancy =
-        await getRouteOccupancy(
-            passenger.flightDate,
-            passenger.route
+    if (messageId) {
+        await editInlineMessage(
+            chatId,
+            messageId,
+            text,
+            keyboard
         );
-
-    const freeSeats =
-        Math.max(
-            0,
-            MAX_SEATS -
-                occupancy
+    } else {
+        await sendInlineMessage(
+            chatId,
+            text,
+            keyboard
         );
-
-    let message =
-        "✅ Пассажир успешно зарегистрирован!\n\n" +
-        `👤 ${passenger.surname} ${passenger.name} ${passenger.patronymic}\n` +
-        `📅 Дата рождения: ${passenger.birthDate}\n` +
-        `🛂 Паспорт: ${passenger.passport}\n` +
-        `🌍 Гражданство: ${passenger.citizenship}\n` +
-        `📅 Дата рейса: ${passenger.flightDate}\n` +
-        `✈️ Маршрут: ${passenger.route}\n` +
-        `📌 Статус: ${passenger.status}\n\n` +
-        `💺 Загрузка маршрута: ${occupancy}/${MAX_SEATS}\n` +
-        `🟢 Свободно: ${freeSeats}`;
-
-    if (
-        occupancy >=
-        MAX_SEATS
-    ) {
-        message +=
-            "\n\n⚠️ На данный маршрут и дату больше нет свободных мест.";
     }
+}
+
+// ======================================================
+// STATUS
+// ======================================================
+
+async function showStatuses(
+    chatId,
+    messageId = null
+) {
+    const keyboard = [
+        [
+            {
+                text: "✅ Подтвержден",
+                callback_data:
+                    "status_select:Подтвержден"
+            }
+        ],
+        [
+            {
+                text: "⏳ Ожидание",
+                callback_data:
+                    "status_select:Ожидание"
+            }
+        ],
+        [
+            {
+                text: "❌ Отменен",
+                callback_data:
+                    "status_select:Отменен"
+            }
+        ],
+        [
+            {
+                text: "↩️ Изменить предыдущий шаг",
+                callback_data:
+                    "previous_step"
+            }
+        ]
+    ];
+
+    const text =
+        "📌 Выберите статус пассажира:";
+
+    if (messageId) {
+        await editInlineMessage(
+            chatId,
+            messageId,
+            text,
+            keyboard
+        );
+    } else {
+        await sendInlineMessage(
+            chatId,
+            text,
+            keyboard
+        );
+    }
+}
+
+// ======================================================
+// PASSENGER CARD
+// ======================================================
+
+function getPassengerCard(data) {
+    return (
+        "📋 Данные пассажира\n\n" +
+        `👤 Фамилия: ${data.surname || "—"}\n` +
+        `👤 Имя: ${data.name || "—"}\n` +
+        `👤 Отчество: ${data.patronymic || "—"}\n` +
+        `🎂 Дата рождения: ${data.birthDate || "—"}\n` +
+        `🛂 Паспорт: ${data.passport || "—"}\n` +
+        `🌍 Гражданство: ${data.citizenship || "—"}\n` +
+        `📅 Дата рейса: ${data.flightDate || "—"}\n` +
+        `✈️ Маршрут: ${data.route || "—"}\n` +
+        `📌 Статус: ${data.status || "—"}`
+    );
+}
+
+// ======================================================
+// SAVED PASSENGER MENU
+// ======================================================
+
+async function showSavedPassenger(
+    chatId,
+    data
+) {
+    const keyboard = [
+        [
+            {
+                text: "✏️ Изменить данные",
+                callback_data:
+                    "edit_passenger"
+            }
+        ],
+        [
+            {
+                text: "➕ Добавить ещё одного",
+                callback_data:
+                    "main_add_passenger"
+            }
+        ],
+        [
+            {
+                text: "🏠 Главное меню",
+                callback_data:
+                    "main_menu"
+            }
+        ]
+    ];
 
     await sendInlineMessage(
         chatId,
-        message,
-        [
-            [
-                {
-                    text:
-                        "➕ Добавить ещё одного",
-
-                    callback_data:
-                        "main_add_passenger"
-                }
-            ],
-            [
-                {
-                    text:
-                        "👤 Посмотреть данные",
-
-                    callback_data:
-                        "main_view_data"
-                }
-            ],
-            [
-                {
-                    text:
-                        "🏠 Главное меню",
-
-                    callback_data:
-                        "main_menu"
-                }
-            ]
-        ]
+        getPassengerCard(data),
+        keyboard
     );
-
-    userStates[chatId] = {
-        step: 0,
-        data: []
-    };
 }
 
-// ==========================================
-// CALLBACK HANDLER
-// ==========================================
+// ======================================================
+// EDIT MENU
+// ======================================================
+
+async function showEditMenu(
+    chatId,
+    messageId = null
+) {
+    const keyboard = [
+        [
+            {
+                text: "✏️ Фамилия",
+                callback_data:
+                    "edit_field:surname"
+            },
+            {
+                text: "✏️ Имя",
+                callback_data:
+                    "edit_field:name"
+            }
+        ],
+        [
+            {
+                text: "✏️ Отчество",
+                callback_data:
+                    "edit_field:patronymic"
+            }
+        ],
+        [
+            {
+                text: "✏️ Дата рождения",
+                callback_data:
+                    "edit_field:birthDate"
+            }
+        ],
+        [
+            {
+                text: "✏️ Паспорт",
+                callback_data:
+                    "edit_field:passport"
+            }
+        ],
+        [
+            {
+                text: "✏️ Гражданство",
+                callback_data:
+                    "edit_field:citizenship"
+            }
+        ],
+        [
+            {
+                text: "✏️ Дата рейса",
+                callback_data:
+                    "edit_field:flightDate"
+            }
+        ],
+        [
+            {
+                text: "✏️ Маршрут",
+                callback_data:
+                    "edit_field:route"
+            }
+        ],
+        [
+            {
+                text: "✏️ Статус",
+                callback_data:
+                    "edit_field:status"
+            }
+        ],
+        [
+            {
+                text: "↩️ Назад",
+                callback_data:
+                    "back_to_passenger"
+            }
+        ]
+    ];
+
+    const text =
+        "✏️ Что хотите изменить?\n\n" +
+        "Выберите нужное поле:";
+
+    if (messageId) {
+        await editInlineMessage(
+            chatId,
+            messageId,
+            text,
+            keyboard
+        );
+    } else {
+        await sendInlineMessage(
+            chatId,
+            text,
+            keyboard
+        );
+    }
+}
+
+// ======================================================
+// FIELD NAMES
+// ======================================================
+
+function getFieldName(field) {
+    const names = {
+        surname: "фамилию",
+        name: "имя",
+        patronymic: "отчество",
+        birthDate: "дату рождения",
+        passport: "номер паспорта",
+        citizenship: "гражданство",
+        flightDate: "дату рейса",
+        route: "маршрут",
+        status: "статус"
+    };
+
+    return names[field] || "данные";
+}
+
+// ======================================================
+// EDIT TEXT FIELD
+// ======================================================
+
+async function startTextEdit(
+    chatId,
+    field
+) {
+    const state =
+        userStates[chatId];
+
+    if (!state) {
+        return;
+    }
+
+    state.editingField =
+        field;
+
+    const currentValue =
+        state.data[field] ||
+        "не указано";
+
+    await sendMessage(
+        chatId,
+        `✏️ Изменение: ${getFieldName(field)}\n\n` +
+        `Текущее значение: ${currentValue}\n\n` +
+        "Введите новое значение:"
+    );
+}
+
+// ======================================================
+// PREVIOUS STEP
+// ======================================================
+
+async function goToPreviousStep(
+    chatId,
+    messageId = null
+) {
+    const state =
+        userStates[chatId];
+
+    if (!state) {
+        return;
+    }
+
+    if (state.step <= 0) {
+        return;
+    }
+
+    state.step--;
+    state.editingField = null;
+
+    if (state.step === 0) {
+        await sendMessage(
+            chatId,
+            `Текущая фамилия: ${state.data.surname || "—"}\n\n` +
+            "Введите фамилию заново:"
+        );
+
+        return;
+    }
+
+    if (state.step === 1) {
+        await sendMessage(
+            chatId,
+            `Текущее имя: ${state.data.name || "—"}\n\n` +
+            "Введите имя заново:"
+        );
+
+        return;
+    }
+
+    if (state.step === 2) {
+        await sendMessage(
+            chatId,
+            `Текущее отчество: ${state.data.patronymic || "—"}\n\n` +
+            "Введите отчество заново:"
+        );
+
+        return;
+    }
+
+    if (state.step === 3) {
+        await showBirthCalendar(
+            chatId,
+            messageId
+        );
+
+        return;
+    }
+
+    if (state.step === 4) {
+        await sendMessage(
+            chatId,
+            `Текущий паспорт: ${state.data.passport || "—"}\n\n` +
+            "Введите номер паспорта заново:"
+        );
+
+        return;
+    }
+
+    if (state.step === 5) {
+        await sendMessage(
+            chatId,
+            `Текущее гражданство: ${state.data.citizenship || "—"}\n\n` +
+            "Введите гражданство заново:"
+        );
+
+        return;
+    }
+
+    if (state.step === 6) {
+        await showFlightCalendar(
+            chatId,
+            messageId
+        );
+
+        return;
+    }
+
+    if (state.step === 7) {
+        await showRoutes(
+            chatId,
+            state.data.flightDate,
+            messageId
+        );
+
+        return;
+    }
+}
+
+// ======================================================
+// EDIT SAVED TEXT FIELD
+// ======================================================
+
+async function processSavedTextEdit(
+    chatId,
+    text
+) {
+    const state =
+        userStates[chatId];
+
+    if (
+        !state ||
+        !state.editingField
+    ) {
+        return false;
+    }
+
+    const field =
+        state.editingField;
+
+    if (!text) {
+        await sendMessage(
+            chatId,
+            "❌ Значение не может быть пустым.\n\n" +
+            `Введите ${getFieldName(field)} ещё раз:`
+        );
+
+        return true;
+    }
+
+    state.data[field] =
+        text;
+
+    state.editingField =
+        null;
+
+    try {
+        await updatePassenger(
+            state.rowNumber,
+            state.data
+        );
+
+        await sendMessage(
+            chatId,
+            "✅ Данные успешно изменены."
+        );
+
+        await showSavedPassenger(
+            chatId,
+            state.data
+        );
+    } catch (error) {
+        console.error(
+            "Ошибка обновления пассажира:",
+            error.message
+        );
+
+        await sendMessage(
+            chatId,
+            "❌ Не удалось сохранить изменение."
+        );
+    }
+
+    return true;
+}
+
+// ======================================================
+// CALLBACK QUERY
+// ======================================================
 
 async function handleCallbackQuery(
     callbackQuery
@@ -1222,30 +1390,25 @@ async function handleCallbackQuery(
         callbackQuery.message.message_id;
 
     const data =
-        callbackQuery.data;
+        callbackQuery.data || "";
 
     await answerCallbackQuery(
         callbackQuery.id
     );
 
-    // ======================================
+    // --------------------------------------------------
     // MAIN MENU
-    // ======================================
+    // --------------------------------------------------
 
-    if (
-        data === "main_menu"
-    ) {
-        await showMainMenu(
-            chatId
-        );
+    if (data === "main_menu") {
+        delete userStates[chatId];
+
+        await showMainMenu(chatId);
 
         return;
     }
 
-    if (
-        data ===
-        "main_add_passenger"
-    ) {
+    if (data === "main_add_passenger") {
         await startPassengerRegistration(
             chatId
         );
@@ -1253,202 +1416,308 @@ async function handleCallbackQuery(
         return;
     }
 
-    if (
-        data ===
-        "main_view_data"
-    ) {
-        const passenger =
-            lastPassengers[chatId];
+    // --------------------------------------------------
+    // MAIN MENU PLACEHOLDERS
+    // --------------------------------------------------
 
-        if (!passenger) {
+    if (data === "main_view_data") {
+        await sendMessage(
+            chatId,
+            "👤 Функция просмотра данных будет использоваться здесь."
+        );
+
+        return;
+    }
+
+    if (data === "main_find_passenger") {
+        await sendMessage(
+            chatId,
+            "🔎 Функция поиска пассажира будет использоваться здесь."
+        );
+
+        return;
+    }
+
+    if (data === "main_flight_passengers") {
+        await sendMessage(
+            chatId,
+            "✈️ Функция пассажиров рейса будет использоваться здесь."
+        );
+
+        return;
+    }
+
+    if (data === "main_statistics") {
+        await sendMessage(
+            chatId,
+            "📊 Функция статистики будет использоваться здесь."
+        );
+
+        return;
+    }
+
+    // --------------------------------------------------
+    // IGNORE
+    // --------------------------------------------------
+
+    if (data === "ignore") {
+        return;
+    }
+
+    // --------------------------------------------------
+    // PREVIOUS STEP
+    // --------------------------------------------------
+
+    if (data === "previous_step") {
+        await goToPreviousStep(
+            chatId,
+            messageId
+        );
+
+        return;
+    }
+
+    // --------------------------------------------------
+    // EDIT PASSENGER
+    // --------------------------------------------------
+
+    if (data === "edit_passenger") {
+        const state =
+            userStates[chatId];
+
+        if (
+            !state ||
+            !state.rowNumber
+        ) {
             await sendMessage(
                 chatId,
-                "ℹ️ Данных о последнем зарегистрированном пассажире пока нет."
+                "❌ Данные пассажира не найдены."
             );
 
             return;
         }
 
-        await sendMessage(
+        await showEditMenu(
             chatId,
-            "👤 Данные последнего зарегистрированного пассажира:\n\n" +
-            `🆔 ID: ${passenger.id}\n` +
-            `Фамилия: ${passenger.surname}\n` +
-            `Имя: ${passenger.name}\n` +
-            `Отчество: ${passenger.patronymic}\n` +
-            `Дата рождения: ${passenger.birthDate}\n` +
-            `Паспорт: ${passenger.passport}\n` +
-            `Гражданство: ${passenger.citizenship}\n` +
-            `Дата рейса: ${passenger.flightDate}\n` +
-            `Маршрут: ${passenger.route}\n` +
-            `Статус: ${passenger.status}`
+            messageId
         );
 
         return;
     }
 
-    if (
-        data ===
-        "main_find_passenger"
-    ) {
-        await sendMessage(
+    // --------------------------------------------------
+    // BACK TO PASSENGER
+    // --------------------------------------------------
+
+    if (data === "back_to_passenger") {
+        const state =
+            userStates[chatId];
+
+        if (!state) {
+            await showMainMenu(chatId);
+            return;
+        }
+
+        const keyboard = [
+            [
+                {
+                    text: "✏️ Изменить данные",
+                    callback_data:
+                        "edit_passenger"
+                }
+            ],
+            [
+                {
+                    text: "➕ Добавить ещё одного",
+                    callback_data:
+                        "main_add_passenger"
+                }
+            ],
+            [
+                {
+                    text: "🏠 Главное меню",
+                    callback_data:
+                        "main_menu"
+                }
+            ]
+        ];
+
+        await editInlineMessage(
             chatId,
-            "🔎 Функция поиска пассажира будет добавлена на следующем этапе."
+            messageId,
+            getPassengerCard(
+                state.data
+            ),
+            keyboard
         );
 
         return;
     }
 
-    if (
-        data ===
-        "main_flight_passengers"
-    ) {
-        await sendMessage(
-            chatId,
-            "✈️ Функция просмотра пассажиров рейса будет добавлена на следующем этапе."
-        );
-
-        return;
-    }
-
-    if (
-        data ===
-        "main_statistics"
-    ) {
-        await sendMessage(
-            chatId,
-            "📊 Функция статистики будет добавлена на следующем этапе."
-        );
-
-        return;
-    }
-
-    // ======================================
-    // STATE
-    // ======================================
-
-    const state =
-        userStates[chatId];
-
-    if (!state) {
-        await showMainMenu(
-            chatId
-        );
-
-        return;
-    }
-
-    // ======================================
-    // BIRTH YEARS PAGINATION
-    // ======================================
+    // --------------------------------------------------
+    // EDIT FIELD
+    // --------------------------------------------------
 
     if (
         data.startsWith(
-            "birth_years_"
+            "edit_field:"
         )
     ) {
-        const page =
-            Number(
-                data.replace(
-                    "birth_years_",
-                    ""
-                )
+        const field =
+            data.split(":")[1];
+
+        const state =
+            userStates[chatId];
+
+        if (!state) {
+            return;
+        }
+
+        if (field === "birthDate") {
+            state.editingField =
+                "birthDate";
+
+            await showBirthCalendar(
+                chatId,
+                messageId
             );
 
-        await showYears(
+            return;
+        }
+
+        if (field === "flightDate") {
+            state.editingField =
+                "flightDate";
+
+            await showFlightCalendar(
+                chatId,
+                messageId
+            );
+
+            return;
+        }
+
+        if (field === "route") {
+            state.editingField =
+                "route";
+
+            await showRoutes(
+                chatId,
+                state.data.flightDate,
+                messageId,
+                true
+            );
+
+            return;
+        }
+
+        if (field === "status") {
+            state.editingField =
+                "status";
+
+            await showStatuses(
+                chatId,
+                messageId
+            );
+
+            return;
+        }
+
+        await startTextEdit(
             chatId,
-            messageId,
-            page,
-            "birth"
+            field
         );
 
         return;
     }
 
-    // ======================================
-    // BIRTH BACK TO YEARS
-    // ======================================
-
-    if (
-        data ===
-        "birth_back_years"
-    ) {
-        await showYears(
-            chatId,
-            messageId,
-            0,
-            "birth"
-        );
-
-        return;
-    }
-
-    // ======================================
-    // BIRTH YEAR
-    // ======================================
+    // --------------------------------------------------
+    // CALENDAR YEAR PAGE
+    // --------------------------------------------------
 
     if (
         data.startsWith(
-            "birth_year_"
-        )
-    ) {
-        const year =
-            Number(
-                data.replace(
-                    "birth_year_",
-                    ""
-                )
-            );
-
-        await showMonths(
-            chatId,
-            messageId,
-            year,
-            "birth"
-        );
-
-        return;
-    }
-
-    // ======================================
-    // BIRTH BACK TO MONTHS
-    // ======================================
-
-    if (
-        data.startsWith(
-            "birth_back_months_"
-        )
-    ) {
-        const year =
-            Number(
-                data.replace(
-                    "birth_back_months_",
-                    ""
-                )
-            );
-
-        await showMonths(
-            chatId,
-            messageId,
-            year,
-            "birth"
-        );
-
-        return;
-    }
-
-    // ======================================
-    // BIRTH MONTH
-    // ======================================
-
-    if (
-        data.startsWith(
-            "birth_month_"
+            "calendar_year_page:"
         )
     ) {
         const parts =
-            data.split("_");
+            data.split(":");
 
+        const type = parts[1];
+        const page =
+            Number(parts[2]);
+
+        await showYears(
+            chatId,
+            messageId,
+            type,
+            page
+        );
+
+        return;
+    }
+
+    // --------------------------------------------------
+    // CALENDAR YEAR
+    // --------------------------------------------------
+
+    if (
+        data.startsWith(
+            "calendar_year:"
+        )
+    ) {
+        const parts =
+            data.split(":");
+
+        const type = parts[1];
+        const year =
+            Number(parts[2]);
+
+        await showMonths(
+            chatId,
+            messageId,
+            type,
+            year
+        );
+
+        return;
+    }
+
+    // --------------------------------------------------
+    // BACK TO YEARS
+    // --------------------------------------------------
+
+    if (
+        data.startsWith(
+            "calendar_back_years:"
+        )
+    ) {
+        const type =
+            data.split(":")[1];
+
+        await showYears(
+            chatId,
+            messageId,
+            type,
+            0
+        );
+
+        return;
+    }
+
+    // --------------------------------------------------
+    // CALENDAR MONTH
+    // --------------------------------------------------
+
+    if (
+        data.startsWith(
+            "calendar_month:"
+        )
+    ) {
+        const parts =
+            data.split(":");
+
+        const type = parts[1];
         const year =
             Number(parts[2]);
 
@@ -1458,25 +1727,54 @@ async function handleCallbackQuery(
         await showDays(
             chatId,
             messageId,
+            type,
             year,
-            month,
-            "birth"
+            month
         );
 
         return;
     }
 
-    // ======================================
-    // BIRTH DAY
-    // ======================================
+    // --------------------------------------------------
+    // BACK TO MONTHS
+    // --------------------------------------------------
 
     if (
         data.startsWith(
-            "birth_day_"
+            "calendar_back_months:"
         )
     ) {
         const parts =
-            data.split("_");
+            data.split(":");
+
+        const type = parts[1];
+
+        const year =
+            Number(parts[2]);
+
+        await showMonths(
+            chatId,
+            messageId,
+            type,
+            year
+        );
+
+        return;
+    }
+
+    // --------------------------------------------------
+    // CALENDAR DAY
+    // --------------------------------------------------
+
+    if (
+        data.startsWith(
+            "calendar_day:"
+        )
+    ) {
+        const parts =
+            data.split(":");
+
+        const type = parts[1];
 
         const year =
             Number(parts[2]);
@@ -1488,658 +1786,647 @@ async function handleCallbackQuery(
             Number(parts[4]);
 
         const selectedDate =
-            new Date(
-                year,
+            formatDate(
+                day,
                 month,
-                day
+                year
             );
 
-        const today =
-            new Date();
+        const state =
+            userStates[chatId];
+
+        if (!state) {
+            return;
+        }
+
+        // ----------------------------------------------
+        // EDIT BIRTH DATE
+        // ----------------------------------------------
 
         if (
-            selectedDate >
-            today
+            state.editingField ===
+            "birthDate"
         ) {
-            await sendMessage(
+            state.data.birthDate =
+                selectedDate;
+
+            state.editingField =
+                null;
+
+            await updatePassenger(
+                state.rowNumber,
+                state.data
+            );
+
+            await editInlineMessage(
                 chatId,
-                "❌ Дата рождения не может быть в будущем."
+                messageId,
+                getPassengerCard(
+                    state.data
+                ),
+                [
+                    [
+                        {
+                            text:
+                                "✏️ Изменить данные",
+                            callback_data:
+                                "edit_passenger"
+                        }
+                    ],
+                    [
+                        {
+                            text:
+                                "🏠 Главное меню",
+                            callback_data:
+                                "main_menu"
+                        }
+                    ]
+                ]
             );
 
             return;
         }
 
-        const birthDate =
-            formatDate(
-                year,
-                month,
-                day
+        // ----------------------------------------------
+        // EDIT FLIGHT DATE
+        // ----------------------------------------------
+
+        if (
+            state.editingField ===
+            "flightDate"
+        ) {
+            const availability =
+                await checkRouteAvailability(
+                    selectedDate,
+                    state.data.route,
+                    state.rowNumber
+                );
+
+            if (
+                availability.occupied >=
+                MAX_SEATS
+            ) {
+                await editInlineMessage(
+                    chatId,
+                    messageId,
+                    `❌ На дату ${selectedDate} по маршруту ${state.data.route} уже занято ${MAX_SEATS}/${MAX_SEATS} мест.\n\nВыберите другую дату:`,
+                    [
+                        [
+                            {
+                                text:
+                                    "📅 Выбрать другую дату",
+                                callback_data:
+                                    "edit_field:flightDate"
+                            }
+                        ],
+                        [
+                            {
+                                text:
+                                    "↩️ Назад",
+                                callback_data:
+                                    "back_to_passenger"
+                            }
+                        ]
+                    ]
+                );
+
+                return;
+            }
+
+            state.data.flightDate =
+                selectedDate;
+
+            state.editingField =
+                null;
+
+            await updatePassenger(
+                state.rowNumber,
+                state.data
             );
 
-        state.data[3] =
-            birthDate;
-
-        // Переходим на паспорт
-        state.step = 4;
-
-        await editInlineMessage(
-            chatId,
-            messageId,
-            `✅ Дата рождения: ${birthDate}`,
-            []
-        );
-
-        await sendMessage(
-            chatId,
-            `${getProgressText(
-                4
-            )}\n\n` +
-            "🛂 Введите номер паспорта:"
-        );
-
-        return;
-    }
-
-    // ======================================
-    // FLIGHT YEARS PAGINATION
-    // ======================================
-
-    if (
-        data.startsWith(
-            "flight_years_"
-        )
-    ) {
-        const page =
-            Number(
-                data.replace(
-                    "flight_years_",
-                    ""
-                )
+            await editInlineMessage(
+                chatId,
+                messageId,
+                getPassengerCard(
+                    state.data
+                ),
+                [
+                    [
+                        {
+                            text:
+                                "✏️ Изменить данные",
+                            callback_data:
+                                "edit_passenger"
+                        }
+                    ],
+                    [
+                        {
+                            text:
+                                "🏠 Главное меню",
+                            callback_data:
+                                "main_menu"
+                        }
+                    ]
+                ]
             );
 
-        await showYears(
-            chatId,
-            messageId,
-            page,
-            "flight"
-        );
+            return;
+        }
 
-        return;
-    }
+        // ----------------------------------------------
+        // NORMAL REGISTRATION — BIRTH DATE
+        // ----------------------------------------------
 
-    // ======================================
-    // FLIGHT BACK TO YEARS
-    // ======================================
+        if (
+            type === "birth" &&
+            state.step === 3
+        ) {
+            state.data.birthDate =
+                selectedDate;
 
-    if (
-        data ===
-        "flight_back_years"
-    ) {
-        await showYears(
-            chatId,
-            messageId,
-            0,
-            "flight"
-        );
+            state.step = 4;
 
-        return;
-    }
-
-    // ======================================
-    // FLIGHT YEAR
-    // ======================================
-
-    if (
-        data.startsWith(
-            "flight_year_"
-        )
-    ) {
-        const year =
-            Number(
-                data.replace(
-                    "flight_year_",
-                    ""
-                )
+            await editInlineMessage(
+                chatId,
+                messageId,
+                "Введите номер паспорта:",
+                previousStepKeyboard(4)
             );
 
-        await showMonths(
-            chatId,
-            messageId,
-            year,
-            "flight"
-        );
+            return;
+        }
 
-        return;
-    }
+        // ----------------------------------------------
+        // NORMAL REGISTRATION — FLIGHT DATE
+        // ----------------------------------------------
 
-    // ======================================
-    // FLIGHT BACK TO MONTHS
-    // ======================================
+        if (
+            type === "flight" &&
+            state.step === 6
+        ) {
+            state.data.flightDate =
+                selectedDate;
 
-    if (
-        data.startsWith(
-            "flight_back_months_"
-        )
-    ) {
-        const year =
-            Number(
-                data.replace(
-                    "flight_back_months_",
-                    ""
-                )
+            state.step = 7;
+
+            await showRoutes(
+                chatId,
+                selectedDate,
+                messageId
             );
 
-        await showMonths(
-            chatId,
-            messageId,
-            year,
-            "flight"
-        );
+            return;
+        }
 
         return;
     }
 
-    // ======================================
-    // FLIGHT MONTH
-    // ======================================
-
-    if (
-        data.startsWith(
-            "flight_month_"
-        )
-    ) {
-        const parts =
-            data.split("_");
-
-        const year =
-            Number(parts[2]);
-
-        const month =
-            Number(parts[3]);
-
-        await showDays(
-            chatId,
-            messageId,
-            year,
-            month,
-            "flight"
-        );
-
-        return;
-    }
-
-    // ======================================
-    // FLIGHT DAY
-    // ======================================
-
-    if (
-        data.startsWith(
-            "flight_day_"
-        )
-    ) {
-        const parts =
-            data.split("_");
-
-        const year =
-            Number(parts[2]);
-
-        const month =
-            Number(parts[3]);
-
-        const day =
-            Number(parts[4]);
-
-        const flightDate =
-            formatDate(
-                year,
-                month,
-                day
-            );
-
-        state.data[6] =
-            flightDate;
-
-        // Переходим на маршрут
-        state.step = 7;
-
-        await editInlineMessage(
-            chatId,
-            messageId,
-            `✅ Дата рейса: ${flightDate}`,
-            []
-        );
-
-        await showRoutes(
-            chatId
-        );
-
-        return;
-    }
-
-    // ======================================
+    // --------------------------------------------------
     // ROUTE FULL
-    // ======================================
+    // --------------------------------------------------
 
-    if (
-        data === "route_full"
-    ) {
+    if (data === "route_full") {
         await sendMessage(
             chatId,
-            "❌ На этом маршруте нет свободных мест."
+            "❌ На выбранном маршруте нет свободных мест."
         );
 
         return;
     }
 
-    // ======================================
-    // ROUTE DSB -> KHR
-    // ======================================
+    // --------------------------------------------------
+    // ROUTE SELECT
+    // --------------------------------------------------
 
     if (
-        data ===
-        "route_dsb_khr"
+        data.startsWith(
+            "route_select:"
+        )
     ) {
         const route =
-            "ДШБ — ХРГ";
-
-        const flightDate =
-            state.data[6];
-
-        const availability =
-            await checkRouteAvailability(
-                flightDate,
-                route
+            data.substring(
+                "route_select:".length
             );
+
+        const state =
+            userStates[chatId];
+
+        if (!state) {
+            return;
+        }
+
+        // ----------------------------------------------
+        // EDIT ROUTE
+        // ----------------------------------------------
 
         if (
-            availability.isFull
+            state.editingField ===
+            "route"
         ) {
-            await sendMessage(
-                chatId,
-                "❌ К сожалению, этот рейс уже заполнен."
+            const availability =
+                await checkRouteAvailability(
+                    state.data.flightDate,
+                    route,
+                    state.rowNumber
+                );
+
+            if (
+                !availability.available
+            ) {
+                await sendMessage(
+                    chatId,
+                    "❌ На этом маршруте уже нет свободных мест."
+                );
+
+                return;
+            }
+
+            state.data.route =
+                route;
+
+            state.editingField =
+                null;
+
+            await updatePassenger(
+                state.rowNumber,
+                state.data
             );
 
-            await showRoutes(
-                chatId
+            await editInlineMessage(
+                chatId,
+                messageId,
+                getPassengerCard(
+                    state.data
+                ),
+                [
+                    [
+                        {
+                            text:
+                                "✏️ Изменить данные",
+                            callback_data:
+                                "edit_passenger"
+                        }
+                    ],
+                    [
+                        {
+                            text:
+                                "🏠 Главное меню",
+                            callback_data:
+                                "main_menu"
+                        }
+                    ]
+                ]
             );
 
             return;
         }
 
-        state.data[7] =
-            route;
+        // ----------------------------------------------
+        // NORMAL REGISTRATION
+        // ----------------------------------------------
 
-        state.step = 8;
-
-        await sendMessage(
-            chatId,
-            `✈️ Маршрут выбран: ${route}\n\n` +
-            `💺 Свободно: ${availability.freeSeats}/${MAX_SEATS}`
-        );
-
-        await showStatuses(
-            chatId
-        );
-
-        return;
-    }
-
-    // ======================================
-    // ROUTE KHR -> DSB
-    // ======================================
-
-    if (
-        data ===
-        "route_khr_dsb"
-    ) {
-        const route =
-            "ХРГ — ДШБ";
-
-        const flightDate =
-            state.data[6];
+        if (state.step !== 7) {
+            return;
+        }
 
         const availability =
             await checkRouteAvailability(
-                flightDate,
+                state.data.flightDate,
                 route
             );
 
         if (
-            availability.isFull
+            !availability.available
         ) {
             await sendMessage(
                 chatId,
-                "❌ К сожалению, этот рейс уже заполнен."
-            );
-
-            await showRoutes(
-                chatId
+                "❌ Этот маршрут уже заполнен."
             );
 
             return;
         }
 
-        state.data[7] =
+        state.data.route =
             route;
 
         state.step = 8;
 
-        await sendMessage(
-            chatId,
-            `✈️ Маршрут выбран: ${route}\n\n` +
-            `💺 Свободно: ${availability.freeSeats}/${MAX_SEATS}`
-        );
-
         await showStatuses(
-            chatId
+            chatId,
+            messageId
         );
 
         return;
     }
 
-    // ======================================
-    // STATUS CONFIRMED
-    // ======================================
+    // --------------------------------------------------
+    // STATUS SELECT
+    // --------------------------------------------------
 
     if (
-        data ===
-        "status_confirmed"
+        data.startsWith(
+            "status_select:"
+        )
     ) {
-        state.data[8] =
-            "Подтвержден";
+        const status =
+            data.substring(
+                "status_select:".length
+            );
 
-        await addPassenger(
-            chatId
-        );
+        const state =
+            userStates[chatId];
 
-        return;
-    }
+        if (!state) {
+            return;
+        }
 
-    // ======================================
-    // STATUS WAITING
-    // ======================================
+        // ----------------------------------------------
+        // EDIT STATUS
+        // ----------------------------------------------
 
-    if (
-        data ===
-        "status_waiting"
-    ) {
-        state.data[8] =
-            "Ожидание";
+        if (
+            state.editingField ===
+            "status"
+        ) {
+            if (
+                status !== "Отменен"
+            ) {
+                const availability =
+                    await checkRouteAvailability(
+                        state.data.flightDate,
+                        state.data.route,
+                        state.rowNumber
+                    );
 
-        await addPassenger(
-            chatId
-        );
+                if (
+                    !availability.available
+                ) {
+                    await sendMessage(
+                        chatId,
+                        "❌ Нельзя изменить статус: на этом рейсе уже нет свободных мест."
+                    );
 
-        return;
-    }
+                    return;
+                }
+            }
 
-    // ======================================
-    // STATUS CANCELLED
-    // ======================================
+            state.data.status =
+                status;
 
-    if (
-        data ===
-        "status_cancelled"
-    ) {
-        state.data[8] =
-            "Отменен";
+            state.editingField =
+                null;
 
-        await addPassenger(
-            chatId
-        );
+            await updatePassenger(
+                state.rowNumber,
+                state.data
+            );
 
-        return;
-    }
+            await editInlineMessage(
+                chatId,
+                messageId,
+                getPassengerCard(
+                    state.data
+                ),
+                [
+                    [
+                        {
+                            text:
+                                "✏️ Изменить данные",
+                            callback_data:
+                                "edit_passenger"
+                        }
+                    ],
+                    [
+                        {
+                            text:
+                                "🏠 Главное меню",
+                            callback_data:
+                                "main_menu"
+                        }
+                    ]
+                ]
+            );
 
-    // ======================================
-    // IGNORE
-    // ======================================
+            return;
+        }
 
-    if (
-        data === "ignore"
-    ) {
+        // ----------------------------------------------
+        // NORMAL REGISTRATION
+        // ----------------------------------------------
+
+        if (state.step !== 8) {
+            return;
+        }
+
+        if (status !== "Отменен") {
+            const availability =
+                await checkRouteAvailability(
+                    state.data.flightDate,
+                    state.data.route
+                );
+
+            if (
+                !availability.available
+            ) {
+                await sendMessage(
+                    chatId,
+                    "❌ К сожалению, во время сохранения место уже заняли. Выберите другой маршрут или дату."
+                );
+
+                state.step = 7;
+
+                await showRoutes(
+                    chatId,
+                    state.data.flightDate
+                );
+
+                return;
+            }
+        }
+
+        state.data.status =
+            status;
+
+        try {
+            const saved =
+                await savePassenger(
+                    state.data
+                );
+
+            state.data.passengerId =
+                saved.passengerId;
+
+            state.rowNumber =
+                saved.rowNumber;
+
+            await sendMessage(
+                chatId,
+                "✅ Пассажир успешно сохранён!"
+            );
+
+            const occupancy =
+                await getRouteOccupancy(
+                    state.data.flightDate,
+                    state.data.route
+                );
+
+            await sendMessage(
+                chatId,
+                `💺 Загрузка маршрута: ${occupancy}/${MAX_SEATS}\n` +
+                `🟢 Свободно: ${Math.max(
+                    0,
+                    MAX_SEATS - occupancy
+                )}`
+            );
+
+            await showSavedPassenger(
+                chatId,
+                state.data
+            );
+        } catch (error) {
+            console.error(
+                "Ошибка сохранения:",
+                error.message
+            );
+
+            await sendMessage(
+                chatId,
+                "❌ Не удалось сохранить пассажира. Попробуйте ещё раз."
+            );
+        }
+
         return;
     }
 }
 
-// ==========================================
-// FORMAT DATE
-// ==========================================
+// ======================================================
+// TEXT MESSAGE
+// ======================================================
 
-function formatDate(
-    year,
-    month,
-    day
-) {
-    return `${String(day).padStart(
-        2,
-        "0"
-    )}.${String(
-        month + 1
-    ).padStart(
-        2,
-        "0"
-    )}.${year}`;
-}
-
-// ==========================================
-// TEXT HANDLER
-// ==========================================
-
-async function handleTextMessage(
-    message
-) {
-    if (
-        !message ||
-        !message.chat
-    ) {
-        return;
-    }
-
+async function handleTextMessage(message) {
     const chatId =
         message.chat.id;
 
     const text =
-        (
-            message.text ||
-            ""
-        ).trim();
+        (message.text || "").trim();
 
-    // ======================================
+    // --------------------------------------------------
     // START
-    // ======================================
+    // --------------------------------------------------
 
-    if (
-        text === "/start" ||
-        text === "/menu"
-    ) {
-        await showMainMenu(
-            chatId
-        );
+    if (text === "/start") {
+        delete userStates[chatId];
+
+        await showMainMenu(chatId);
 
         return;
     }
 
-    // ======================================
-    // OLD MENU TEXT SUPPORT
-    // ======================================
+    // --------------------------------------------------
+    // MENU
+    // --------------------------------------------------
 
-    if (
-        text ===
-        "➕ Добавить пассажира"
-    ) {
-        await startPassengerRegistration(
-            chatId
-        );
+    if (text === "/menu") {
+        delete userStates[chatId];
+
+        await showMainMenu(chatId);
 
         return;
     }
-
-    if (
-        text ===
-        "👤 Посмотреть данные"
-    ) {
-        const passenger =
-            lastPassengers[chatId];
-
-        if (!passenger) {
-            await sendMessage(
-                chatId,
-                "ℹ️ Данных о последнем зарегистрированном пассажире пока нет."
-            );
-
-            return;
-        }
-
-        await sendMessage(
-            chatId,
-            "👤 Данные последнего зарегистрированного пассажира:\n\n" +
-            `🆔 ID: ${passenger.id}\n` +
-            `Фамилия: ${passenger.surname}\n` +
-            `Имя: ${passenger.name}\n` +
-            `Отчество: ${passenger.patronymic}\n` +
-            `Дата рождения: ${passenger.birthDate}\n` +
-            `Паспорт: ${passenger.passport}\n` +
-            `Гражданство: ${passenger.citizenship}\n` +
-            `Дата рейса: ${passenger.flightDate}\n` +
-            `Маршрут: ${passenger.route}\n` +
-            `Статус: ${passenger.status}`
-        );
-
-        return;
-    }
-
-    if (
-        text ===
-        "🔎 Найти пассажира"
-    ) {
-        await sendMessage(
-            chatId,
-            "🔎 Функция поиска пассажира будет добавлена на следующем этапе."
-        );
-
-        return;
-    }
-
-    if (
-        text ===
-        "✈️ Пассажиры рейса"
-    ) {
-        await sendMessage(
-            chatId,
-            "✈️ Функция просмотра пассажиров рейса будет добавлена на следующем этапе."
-        );
-
-        return;
-    }
-
-    if (
-        text ===
-        "📊 Статистика"
-    ) {
-        await sendMessage(
-            chatId,
-            "📊 Функция статистики будет добавлена на следующем этапе."
-        );
-
-        return;
-    }
-
-    // ======================================
-    // STATE
-    // ======================================
 
     const state =
         userStates[chatId];
 
     if (!state) {
-        await showMainMenu(
-            chatId
-        );
-
+        await showMainMenu(chatId);
         return;
     }
 
-    // ======================================
-    // STEP 0 — SURNAME
-    // ======================================
+    // --------------------------------------------------
+    // EDIT SAVED DATA
+    // --------------------------------------------------
 
-    if (
-        state.step === 0
-    ) {
+    if (state.editingField) {
+        const handled =
+            await processSavedTextEdit(
+                chatId,
+                text
+            );
+
+        if (handled) {
+            return;
+        }
+    }
+
+    // --------------------------------------------------
+    // STEP 0 — SURNAME
+    // --------------------------------------------------
+
+    if (state.step === 0) {
         if (!text) {
             await sendMessage(
                 chatId,
-                `${getProgressText(
-                    0
-                )}\n\n` +
-                "❌ Фамилия не может быть пустой.\n\n" +
-                "Введите фамилию:"
+                "❌ Фамилия не может быть пустой.\n\nВведите фамилию:"
             );
 
             return;
         }
 
-        state.data[0] =
+        state.data.surname =
             text;
 
         state.step = 1;
 
         await sendMessage(
             chatId,
-            `${getProgressText(
-                1
-            )}\n\n` +
-            "Введите имя пассажира:"
+            "Введите имя:"
         );
 
         return;
     }
 
-    // ======================================
+    // --------------------------------------------------
     // STEP 1 — NAME
-    // ======================================
+    // --------------------------------------------------
 
-    if (
-        state.step === 1
-    ) {
+    if (state.step === 1) {
         if (!text) {
             await sendMessage(
                 chatId,
-                `${getProgressText(
-                    1
-                )}\n\n` +
-                "❌ Имя не может быть пустым.\n\n" +
-                "Введите имя:"
+                "❌ Имя не может быть пустым.\n\nВведите имя:"
             );
 
             return;
         }
 
-        state.data[1] =
+        state.data.name =
             text;
 
         state.step = 2;
 
         await sendMessage(
             chatId,
-            `${getProgressText(
-                2
-            )}\n\n` +
-            "Введите отчество пассажира:"
+            "Введите отчество:"
         );
 
         return;
     }
 
-    // ======================================
+    // --------------------------------------------------
     // STEP 2 — PATRONYMIC
-    // ======================================
+    // --------------------------------------------------
 
-    if (
-        state.step === 2
-    ) {
-        state.data[2] =
+    if (state.step === 2) {
+        if (!text) {
+            await sendMessage(
+                chatId,
+                "❌ Отчество не может быть пустым.\n\nВведите отчество:"
+            );
+
+            return;
+        }
+
+        state.data.patronymic =
             text;
 
         state.step = 3;
@@ -2151,73 +2438,61 @@ async function handleTextMessage(
         return;
     }
 
-    // ======================================
+    // --------------------------------------------------
     // STEP 3 — BIRTH DATE
-    // ======================================
+    // --------------------------------------------------
 
-    if (
-        state.step === 3
-    ) {
+    if (state.step === 3) {
+        await sendMessage(
+            chatId,
+            "📅 Пожалуйста, выберите дату рождения через календарь."
+        );
+
         return;
     }
 
-    // ======================================
+    // --------------------------------------------------
     // STEP 4 — PASSPORT
-    // ======================================
+    // --------------------------------------------------
 
-    if (
-        state.step === 4
-    ) {
+    if (state.step === 4) {
         if (!text) {
             await sendMessage(
                 chatId,
-                `${getProgressText(
-                    4
-                )}\n\n` +
-                "❌ Номер паспорта не может быть пустым.\n\n" +
-                "Введите номер паспорта:"
+                "❌ Номер паспорта не может быть пустым.\n\nВведите номер паспорта:"
             );
 
             return;
         }
 
-        state.data[4] =
+        state.data.passport =
             text;
 
         state.step = 5;
 
         await sendMessage(
             chatId,
-            `${getProgressText(
-                5
-            )}\n\n` +
             "🌍 Введите гражданство:"
         );
 
         return;
     }
 
-    // ======================================
+    // --------------------------------------------------
     // STEP 5 — CITIZENSHIP
-    // ======================================
+    // --------------------------------------------------
 
-    if (
-        state.step === 5
-    ) {
+    if (state.step === 5) {
         if (!text) {
             await sendMessage(
                 chatId,
-                `${getProgressText(
-                    5
-                )}\n\n` +
-                "❌ Гражданство не может быть пустым.\n\n" +
-                "Введите гражданство:"
+                "❌ Гражданство не может быть пустым.\n\nВведите гражданство:"
             );
 
             return;
         }
 
-        state.data[5] =
+        state.data.citizenship =
             text;
 
         state.step = 6;
@@ -2229,42 +2504,49 @@ async function handleTextMessage(
         return;
     }
 
-    // ======================================
+    // --------------------------------------------------
     // STEP 6 — FLIGHT DATE
-    // ======================================
+    // --------------------------------------------------
 
-    if (
-        state.step === 6
-    ) {
-        // Дата выбирается
-        // только через календарь
+    if (state.step === 6) {
+        await sendMessage(
+            chatId,
+            "📅 Пожалуйста, выберите дату рейса через календарь."
+        );
+
         return;
     }
 
-    // ======================================
+    // --------------------------------------------------
     // STEP 7 — ROUTE
-    // ======================================
+    // --------------------------------------------------
 
-    if (
-        state.step === 7
-    ) {
+    if (state.step === 7) {
+        await sendMessage(
+            chatId,
+            "✈️ Пожалуйста, выберите маршрут кнопкой."
+        );
+
         return;
     }
 
-    // ======================================
+    // --------------------------------------------------
     // STEP 8 — STATUS
-    // ======================================
+    // --------------------------------------------------
 
-    if (
-        state.step === 8
-    ) {
+    if (state.step === 8) {
+        await sendMessage(
+            chatId,
+            "📌 Пожалуйста, выберите статус кнопкой."
+        );
+
         return;
     }
 }
 
-// ==========================================
-// WEBHOOK
-// ==========================================
+// ======================================================
+// TELEGRAM WEBHOOK
+// ======================================================
 
 app.post(
     "/telegram/webhook",
@@ -2283,9 +2565,7 @@ app.post(
                 "🚫 Заблокирован запрос с неверным webhook secret"
             );
 
-            return res.sendStatus(
-                403
-            );
+            return res.sendStatus(403);
         }
 
         res.sendStatus(200);
@@ -2304,9 +2584,7 @@ app.post(
                 return;
             }
 
-            if (
-                update.message
-            ) {
+            if (update.message) {
                 await handleTextMessage(
                     update.message
                 );
@@ -2322,9 +2600,9 @@ app.post(
     }
 );
 
-// ==========================================
+// ======================================================
 // HEALTH CHECK
-// ==========================================
+// ======================================================
 
 app.get(
     "/",
@@ -2335,14 +2613,12 @@ app.get(
     }
 );
 
-// ==========================================
-// SETUP WEBHOOK
-// ==========================================
+// ======================================================
+// WEBHOOK SETUP
+// ======================================================
 
 async function setupWebhook() {
-    if (
-        !TELEGRAM_WEBHOOK_SECRET
-    ) {
+    if (!TELEGRAM_WEBHOOK_SECRET) {
         console.error(
             "❌ TELEGRAM_WEBHOOK_SECRET не установлен!"
         );
@@ -2376,9 +2652,7 @@ async function setupWebhook() {
                 }
             );
 
-        if (
-            result.ok
-        ) {
+        if (result.ok) {
             console.log(
                 "🔐 Защищённый Telegram Webhook успешно установлен"
             );
@@ -2396,9 +2670,9 @@ async function setupWebhook() {
     }
 }
 
-// ==========================================
+// ======================================================
 // START SERVER
-// ==========================================
+// ======================================================
 
 app.listen(
     PORT,
