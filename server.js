@@ -605,6 +605,45 @@ const WEEKDAYS = [
 ];
 
 // ======================================================
+// CALENDAR TITLES
+// ======================================================
+
+function getCalendarTitle(
+    type,
+    level
+) {
+    if (type === "birth") {
+        if (level === "year") {
+            return "📅 Выберите год рождения:";
+        }
+
+        if (level === "month") {
+            return "📅 Выберите месяц рождения:";
+        }
+
+        if (level === "day") {
+            return "📅 Выберите день рождения:";
+        }
+    }
+
+    if (type === "flight") {
+        if (level === "year") {
+            return "📅 Выберите год даты рейса:";
+        }
+
+        if (level === "month") {
+            return "📅 Выберите месяц даты рейса:";
+        }
+
+        if (level === "day") {
+            return "📅 Выберите день даты рейса:";
+        }
+    }
+
+    return "📅 Выберите дату:";
+}
+
+// ======================================================
 // PREVIOUS STEP BUTTON
 // ======================================================
 
@@ -644,7 +683,7 @@ async function showYears(
     const currentYear =
         now.getFullYear();
 
-    // Здесь теперь 12 годов
+    // 12 лет на одной странице
     const yearsPerPage = 12;
 
     let minYear;
@@ -692,7 +731,6 @@ async function showYears(
                 `calendar_year:${type}:${year}`
         });
 
-        // По 3 года в строке
         if (
             row.length === 3
         ) {
@@ -759,7 +797,12 @@ async function showYears(
     await editInlineMessage(
         chatId,
         messageId,
-        "📅 Выберите год:",
+
+        getCalendarTitle(
+            type,
+            "year"
+        ),
+
         keyboard
     );
 }
@@ -829,7 +872,12 @@ async function showMonths(
         chatId,
         messageId,
 
-        `📅 ${year} год\n\nВыберите месяц:`,
+        getCalendarTitle(
+            type,
+            "month"
+        ) +
+
+        `\n\n${year} год`,
 
         keyboard
     );
@@ -925,8 +973,8 @@ async function showDays(
         let disabled =
             false;
 
-        // Для рождения нельзя выбрать
-        // будущую дату
+        // Для даты рождения
+        // нельзя выбрать будущее
         if (
             type === "birth" &&
             selectedDate >
@@ -1006,7 +1054,12 @@ async function showDays(
         chatId,
         messageId,
 
-        `📅 ${MONTHS[month]} ${year}\n\nВыберите день:`,
+        getCalendarTitle(
+            type,
+            "day"
+        ) +
+
+        `\n\n${MONTHS[month]} ${year}`,
 
         keyboard
     );
@@ -1041,14 +1094,24 @@ async function showBirthCalendar(
             await editInlineMessage(
                 chatId,
                 existingMessageId,
-                "📅 Выберите год:",
+
+                getCalendarTitle(
+                    "birth",
+                    "year"
+                ),
+
                 keyboard
             );
     } else {
         result =
             await sendInlineMessage(
                 chatId,
-                "📅 Выберите год:",
+
+                getCalendarTitle(
+                    "birth",
+                    "year"
+                ),
+
                 keyboard
             );
     }
@@ -1096,14 +1159,24 @@ async function showFlightCalendar(
             await editInlineMessage(
                 chatId,
                 existingMessageId,
-                "📅 Выберите год:",
+
+                getCalendarTitle(
+                    "flight",
+                    "year"
+                ),
+
                 keyboard
             );
     } else {
         result =
             await sendInlineMessage(
                 chatId,
-                "📅 Выберите год:",
+
+                getCalendarTitle(
+                    "flight",
+                    "year"
+                ),
+
                 keyboard
             );
     }
@@ -3107,6 +3180,8 @@ async function handleTextMessage(
 
         state.step = 6;
 
+        // Здесь начинается именно календарь
+        // даты рейса
         await showFlightCalendar(
             chatId
         );
