@@ -9,14 +9,26 @@ app.use(express.json());
 const PORT = process.env.PORT || 10000;
 
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const GOOGLE_CLIENT_EMAIL = process.env.GOOGLE_CLIENT_EMAIL;
-const GOOGLE_PRIVATE_KEY = process.env.GOOGLE_PRIVATE_KEY
-    ? process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, "\n")
-    : "";
-const SPREADSHEET_ID = process.env.GOOGLE_SHEET_ID;
+
+const GOOGLE_CLIENT_EMAIL =
+    process.env.GOOGLE_CLIENT_EMAIL;
+
+const GOOGLE_PRIVATE_KEY =
+    process.env.GOOGLE_PRIVATE_KEY
+        ? process.env.GOOGLE_PRIVATE_KEY.replace(
+              /\\n/g,
+              "\n"
+          )
+        : "";
+
+const SPREADSHEET_ID =
+    process.env.GOOGLE_SHEET_ID;
+
 const TELEGRAM_WEBHOOK_SECRET =
     process.env.TELEGRAM_WEBHOOK_SECRET;
-const PUBLIC_URL = process.env.PUBLIC_URL;
+
+const PUBLIC_URL =
+    process.env.PUBLIC_URL;
 
 const CAPACITY = 19;
 const PAGE_SIZE = 8;
@@ -126,9 +138,10 @@ async function editMessage(
         chat_id: chatId,
         message_id: messageId,
         text,
-        reply_markup: replyMarkup || {
-            inline_keyboard: []
-        }
+        reply_markup:
+            replyMarkup || {
+                inline_keyboard: []
+            }
     };
 
     return telegramRequest(
@@ -144,7 +157,8 @@ async function answerCallbackQuery(
     return telegramRequest(
         "answerCallbackQuery",
         {
-            callback_query_id: callbackQueryId,
+            callback_query_id:
+                callbackQueryId,
             text
         }
     );
@@ -224,7 +238,8 @@ async function getSheetTitle() {
 
     const spreadsheet =
         await sheets.spreadsheets.get({
-            spreadsheetId: SPREADSHEET_ID
+            spreadsheetId:
+                SPREADSHEET_ID
         });
 
     if (
@@ -245,13 +260,16 @@ async function getSheetTitle() {
 
 async function getAllPassengers() {
     const sheets = await getSheets();
+
     const sheetTitle =
         await getSheetTitle();
 
     const result =
         await sheets.spreadsheets.values.get({
-            spreadsheetId: SPREADSHEET_ID,
-            range: `${sheetTitle}!A:L`
+            spreadsheetId:
+                SPREADSHEET_ID,
+            range:
+                `${sheetTitle}!A:L`
         });
 
     return result.data.values || [];
@@ -270,12 +288,17 @@ function createState() {
     return {
         step: 0,
         data: {},
+
         calendarType: null,
         calendarPage: 0,
+
         editingField: null,
+
         rowNumber: null,
+
         calendarYear: null,
         calendarMonth: null,
+
         messageId: null,
 
         viewMode: null,
@@ -321,7 +344,11 @@ function validateTajikPhone(phone) {
 }
 
 function isValidDateString(date) {
-    if (!/^\d{2}\.\d{2}\.\d{4}$/.test(date)) {
+    if (
+        !/^\d{2}\.\d{2}\.\d{4}$/.test(
+            date
+        )
+    ) {
         return false;
     }
 
@@ -340,7 +367,8 @@ function isValidDateString(date) {
 
     return (
         d.getFullYear() === year &&
-        d.getMonth() === month - 1 &&
+        d.getMonth() ===
+            month - 1 &&
         d.getDate() === day
     );
 }
@@ -447,6 +475,7 @@ async function askRegistrationStep(
             state.messageId,
             "Введите фамилию:"
         );
+
         return;
     }
 
@@ -456,6 +485,7 @@ async function askRegistrationStep(
             state.messageId,
             "Введите имя:"
         );
+
         return;
     }
 
@@ -465,11 +495,14 @@ async function askRegistrationStep(
             state.messageId,
             "Введите отчество:"
         );
+
         return;
     }
 
     if (state.step === 3) {
-        state.calendarType = "birth";
+        state.calendarType =
+            "birth";
+
         state.calendarPage = 0;
 
         await showCalendar(
@@ -510,7 +543,9 @@ async function askRegistrationStep(
     }
 
     if (state.step === 7) {
-        state.calendarType = "flight";
+        state.calendarType =
+            "flight";
+
         state.calendarPage = 0;
 
         await showCalendar(
@@ -667,10 +702,12 @@ async function showContactMenu(
     const text =
         "📞 Контакты\n\n" +
         `Контакт 1: ${
-            state.data.contact1 || "не указан"
+            state.data.contact1 ||
+            "не указан"
         }\n` +
         `Контакт 2: ${
-            state.data.contact2 || "не указан"
+            state.data.contact2 ||
+            "не указан"
         }`;
 
     await editMessage(
@@ -770,11 +807,17 @@ async function showStatusMenu(
 ========================================================= */
 
 function getBaseCalendarType(type) {
-    if (type === "birth_edit") {
+    if (
+        type ===
+        "birth_edit"
+    ) {
         return "birth";
     }
 
-    if (type === "flight_edit") {
+    if (
+        type ===
+        "flight_edit"
+    ) {
         return "flight";
     }
 
@@ -814,7 +857,8 @@ function getBirthYears(page) {
         new Date().getFullYear();
 
     const start =
-        currentYear - page * 12;
+        currentYear -
+        page * 12;
 
     const result = [];
 
@@ -837,7 +881,8 @@ function getFlightYears(page) {
         new Date().getFullYear();
 
     const start =
-        currentYear + page * 12;
+        currentYear +
+        page * 12;
 
     const result = [];
 
@@ -889,7 +934,8 @@ function getYearsKeyboard(
             j++
         ) {
             row.push({
-                text: String(years[j]),
+                text:
+                    String(years[j]),
                 callback_data:
                     `calendar_year_${years[j]}`
             });
@@ -904,36 +950,51 @@ function getYearsKeyboard(
         navigation.push({
             text: "⬅️ Назад",
             callback_data:
-                `calendar_year_page_${page - 1}`
+                `calendar_year_page_${
+                    page - 1
+                }`
         });
     }
 
     const nextYears =
         base === "birth"
-            ? getBirthYears(page + 1)
-            : getFlightYears(page + 1);
+            ? getBirthYears(
+                  page + 1
+              )
+            : getFlightYears(
+                  page + 1
+              );
 
     if (nextYears.length > 0) {
         navigation.push({
             text: "➡️ Далее",
             callback_data:
-                `calendar_year_page_${page + 1}`
+                `calendar_year_page_${
+                    page + 1
+                }`
         });
     }
 
     if (navigation.length) {
-        keyboard.push(navigation);
+        keyboard.push(
+            navigation
+        );
     }
 
     return {
-        inline_keyboard: keyboard
+        inline_keyboard:
+            keyboard
     };
 }
 
 function getMonthsKeyboard() {
     const keyboard = [];
 
-    for (let i = 0; i < 12; i += 3) {
+    for (
+        let i = 0;
+        i < 12;
+        i += 3
+    ) {
         const row = [];
 
         for (
@@ -942,7 +1003,8 @@ function getMonthsKeyboard() {
             j++
         ) {
             row.push({
-                text: MONTHS[j],
+                text:
+                    MONTHS[j],
                 callback_data:
                     `calendar_month_${j}`
             });
@@ -960,7 +1022,8 @@ function getMonthsKeyboard() {
     ]);
 
     return {
-        inline_keyboard: keyboard
+        inline_keyboard:
+            keyboard
     };
 }
 
@@ -1025,7 +1088,8 @@ function getDaysKeyboard(
         }
 
         row.push({
-            text: String(day),
+            text:
+                String(day),
             callback_data:
                 `calendar_day_${day}`
         });
@@ -1052,7 +1116,8 @@ function getDaysKeyboard(
     ]);
 
     return {
-        inline_keyboard: keyboard
+        inline_keyboard:
+            keyboard
     };
 }
 
@@ -1133,13 +1198,15 @@ async function calculateRouteOccupancy(
 
         if (
             excludeRowNumber &&
-            Number(excludeRowNumber) ===
-                rowNumber
+            Number(
+                excludeRowNumber
+            ) === rowNumber
         ) {
             continue;
         }
 
-        const row = rows[i];
+        const row =
+            rows[i];
 
         const passengerFlightDate =
             row[9] || "";
@@ -1153,7 +1220,8 @@ async function calculateRouteOccupancy(
         if (
             passengerFlightDate ===
                 flightDate &&
-            passengerRoute === route &&
+            passengerRoute ===
+                route &&
             passengerStatus !==
                 "Отменен"
         ) {
@@ -1432,7 +1500,7 @@ function getEditMenuKeyboard() {
                 {
                     text: "↩️ Назад",
                     callback_data:
-                        "edit_back"
+                        "edit_menu_back"
                 }
             ]
         ]
@@ -1540,7 +1608,9 @@ async function showEditContact(
         chatId,
         state.messageId,
         `Введите контакт ${number}:`,
-        getEditContactKeyboard(number)
+        getEditContactKeyboard(
+            number
+        )
     );
 }
 
@@ -1661,6 +1731,8 @@ async function showViewDataMenu(
     state.viewMode = null;
     state.viewPage = 0;
     state.editingField = null;
+    state.viewDate = null;
+    state.viewRoute = null;
 
     await editMessage(
         chatId,
@@ -1681,18 +1753,42 @@ function rowToPassenger(
 ) {
     return {
         rowNumber,
-        passengerId: row[0] || "",
-        surname: row[1] || "",
-        name: row[2] || "",
-        patronymic: row[3] || "",
-        birthDate: row[4] || "",
-        passport: row[5] || "",
-        citizenship: row[6] || "",
-        contact1: row[7] || "",
-        contact2: row[8] || "",
-        flightDate: row[9] || "",
-        route: row[10] || "",
-        status: row[11] || ""
+
+        passengerId:
+            row[0] || "",
+
+        surname:
+            row[1] || "",
+
+        name:
+            row[2] || "",
+
+        patronymic:
+            row[3] || "",
+
+        birthDate:
+            row[4] || "",
+
+        passport:
+            row[5] || "",
+
+        citizenship:
+            row[6] || "",
+
+        contact1:
+            row[7] || "",
+
+        contact2:
+            row[8] || "",
+
+        flightDate:
+            row[9] || "",
+
+        route:
+            row[10] || "",
+
+        status:
+            row[11] || ""
     };
 }
 
@@ -1752,15 +1848,24 @@ function getPassengerListText(
     let text =
         `${title}\n\n`;
 
-    if (!pagePassengers.length) {
-        text += "Пассажиров нет.";
+    if (
+        !pagePassengers.length
+    ) {
+        text +=
+            "Пассажиров нет.";
+
         return text;
     }
 
     pagePassengers.forEach(
-        (passenger, index) => {
+        (
+            passenger,
+            index
+        ) => {
             const number =
-                start + index + 1;
+                start +
+                index +
+                1;
 
             text +=
                 `${number}. ` +
@@ -1777,13 +1882,25 @@ function getPassengerListText(
             text += "\n";
 
             text +=
-                `   🆔 ${passenger.passengerId || "—"}\n`;
+                `   🆔 ${
+                    passenger.passengerId ||
+                    "—"
+                }\n`;
 
             text +=
-                `   📅 ${passenger.flightDate || "—"} | ${passenger.route || "—"}\n`;
+                `   📅 ${
+                    passenger.flightDate ||
+                    "—"
+                } | ${
+                    passenger.route ||
+                    "—"
+                }\n`;
 
             text +=
-                `   ${passenger.status || "—"}\n\n`;
+                `   ${
+                    passenger.status ||
+                    "—"
+                }\n\n`;
         }
     );
 
@@ -1821,9 +1938,14 @@ function getPassengerListKeyboard(
         );
 
     current.forEach(
-        (passenger, index) => {
+        (
+            passenger,
+            index
+        ) => {
             const number =
-                start + index + 1;
+                start +
+                index +
+                1;
 
             keyboard.push([
                 {
@@ -1842,7 +1964,9 @@ function getPassengerListKeyboard(
         navigation.push({
             text: "⬅️",
             callback_data:
-                `${prefix}_page_${page - 1}`
+                `${prefix}_page_${
+                    page - 1
+                }`
         });
     }
 
@@ -1853,7 +1977,9 @@ function getPassengerListKeyboard(
         navigation.push({
             text: "➡️",
             callback_data:
-                `${prefix}_page_${page + 1}`
+                `${prefix}_page_${
+                    page + 1
+                }`
         });
     }
 
@@ -1872,7 +1998,8 @@ function getPassengerListKeyboard(
     ]);
 
     return {
-        inline_keyboard: keyboard
+        inline_keyboard:
+            keyboard
     };
 }
 
@@ -2192,7 +2319,7 @@ async function handleTextMessage(
 
 
     /* =========================================
-       SPECIAL REGISTRATION INPUT
+       REGISTRATION CITIZENSHIP OTHER
     ========================================= */
 
     if (
@@ -2202,7 +2329,9 @@ async function handleTextMessage(
         state.data.citizenship =
             text;
 
-        state.editingField = null;
+        state.editingField =
+            null;
+
         state.step = 6;
 
         await showContact1Menu(
@@ -2213,6 +2342,11 @@ async function handleTextMessage(
         return;
     }
 
+
+    /* =========================================
+       REGISTRATION CONTACT 1 OTHER
+    ========================================= */
+
     if (
         state.editingField ===
         "registration_contact1_other"
@@ -2220,7 +2354,8 @@ async function handleTextMessage(
         state.data.contact1 =
             text;
 
-        state.editingField = null;
+        state.editingField =
+            null;
 
         await showContactMenu(
             chatId,
@@ -2230,6 +2365,11 @@ async function handleTextMessage(
         return;
     }
 
+
+    /* =========================================
+       REGISTRATION CONTACT 2 OTHER
+    ========================================= */
+
     if (
         state.editingField ===
         "registration_contact2_other"
@@ -2237,7 +2377,8 @@ async function handleTextMessage(
         state.data.contact2 =
             text;
 
-        state.editingField = null;
+        state.editingField =
+            null;
 
         await showContactMenu(
             chatId,
@@ -2264,7 +2405,8 @@ async function handleTextMessage(
             state.data
         );
 
-        state.editingField = null;
+        state.editingField =
+            null;
 
         await showEditMenu(
             chatId,
@@ -2291,7 +2433,8 @@ async function handleTextMessage(
             state.data
         );
 
-        state.editingField = null;
+        state.editingField =
+            null;
 
         await showEditMenu(
             chatId,
@@ -2313,7 +2456,8 @@ async function handleTextMessage(
             state.data
         );
 
-        state.editingField = null;
+        state.editingField =
+            null;
 
         await showEditMenu(
             chatId,
@@ -2361,7 +2505,8 @@ async function handleTextMessage(
                 }
             );
 
-            state.viewMode = null;
+            state.viewMode =
+                null;
 
             return;
         }
@@ -2421,7 +2566,8 @@ async function handleTextMessage(
                 }
             );
 
-            state.viewMode = null;
+            state.viewMode =
+                null;
 
             return;
         }
@@ -2448,10 +2594,14 @@ async function handleTextMessage(
             state.editingField;
 
         if (
-            field === "surname" ||
-            field === "name" ||
-            field === "patronymic" ||
-            field === "passport"
+            field ===
+                "surname" ||
+            field ===
+                "name" ||
+            field ===
+                "patronymic" ||
+            field ===
+                "passport"
         ) {
             state.data[field] =
                 text;
@@ -2461,7 +2611,8 @@ async function handleTextMessage(
                 state.data
             );
 
-            state.editingField = null;
+            state.editingField =
+                null;
 
             await showEditMenu(
                 chatId,
@@ -2472,8 +2623,10 @@ async function handleTextMessage(
         }
 
         if (
-            field === "contact1" ||
-            field === "contact2"
+            field ===
+                "contact1" ||
+            field ===
+                "contact2"
         ) {
             const contact =
                 validateTajikPhone(
@@ -2486,7 +2639,8 @@ async function handleTextMessage(
                     state.messageId,
                     "❌ Неверный номер.\n\nВведите номер Таджикистана в формате 900000000 или +992900000000.",
                     getEditContactKeyboard(
-                        field === "contact1"
+                        field ===
+                            "contact1"
                             ? 1
                             : 2
                     )
@@ -2503,7 +2657,8 @@ async function handleTextMessage(
                 state.data
             );
 
-            state.editingField = null;
+            state.editingField =
+                null;
 
             await showEditMenu(
                 chatId,
@@ -2943,6 +3098,9 @@ async function handleCallbackQuery(
                     "ДШБ — ХРГ"
             );
 
+        state.viewRoute =
+            "ДШБ — ХРГ";
+
         await showPassengersFiltered(
             chatId,
             state,
@@ -2967,6 +3125,9 @@ async function handleCallbackQuery(
                     p.route ===
                     "ХРГ — ДШБ"
             );
+
+        state.viewRoute =
+            "ХРГ — ДШБ";
 
         await showPassengersFiltered(
             chatId,
@@ -3101,7 +3262,7 @@ async function handleCallbackQuery(
 
 
     /* =========================================
-       VIEW DATE CALENDAR
+       DATE CALENDAR
     ========================================= */
 
     if (
@@ -3330,7 +3491,8 @@ async function handleCallbackQuery(
                     );
 
                 if (
-                    occupancy >= CAPACITY
+                    occupancy >=
+                    CAPACITY
                 ) {
                     await editMessage(
                         chatId,
@@ -3537,6 +3699,27 @@ async function handleCallbackQuery(
         }
 
         if (
+            state.viewRoute
+        ) {
+            await editMessage(
+                chatId,
+                messageId,
+                getPassengerListText(
+                    state.viewPassengers,
+                    state.viewPage,
+                    `✈️ ${state.viewRoute}`
+                ),
+                getPassengerListKeyboard(
+                    state.viewPassengers,
+                    state.viewPage,
+                    "routeview"
+                )
+            );
+
+            return;
+        }
+
+        if (
             state.viewDate
         ) {
             await editMessage(
@@ -3551,6 +3734,28 @@ async function handleCallbackQuery(
                     state.viewPassengers,
                     state.viewPage,
                     "dateview"
+                )
+            );
+
+            return;
+        }
+
+        if (
+            state.viewMode ===
+            "search_result"
+        ) {
+            await editMessage(
+                chatId,
+                messageId,
+                getPassengerListText(
+                    state.viewPassengers,
+                    state.viewPage,
+                    "🔎 Результат поиска"
+                ),
+                getPassengerListKeyboard(
+                    state.viewPassengers,
+                    state.viewPage,
+                    "search"
                 )
             );
 
@@ -3631,8 +3836,10 @@ async function handleCallbackQuery(
         "contacts_continue"
     ) {
         state.step = 7;
+
         state.calendarType =
             "flight";
+
         state.calendarPage = 0;
 
         await showCalendar(
@@ -3646,7 +3853,7 @@ async function handleCallbackQuery(
 
 
     /* =========================================
-       CITIZENSHIP
+       CITIZENSHIP REGISTRATION
     ========================================= */
 
     if (
@@ -3701,112 +3908,26 @@ async function handleCallbackQuery(
 
 
     /* =========================================
-       ROUTE — REGISTRATION
-    ========================================= */
-
-    if (
-        state.step === 8 &&
-        (
-            data ===
-                "route_DSHB_XRG" ||
-            data ===
-                "route_XRG_DSHB"
-        )
-    ) {
-        const route =
-            data ===
-                "route_DSHB_XRG"
-                ? "ДШБ — ХРГ"
-                : "ХРГ — ДШБ";
-
-        const occupancy =
-            await calculateRouteOccupancy(
-                state.data.flightDate,
-                route
-            );
-
-        if (
-            occupancy >= CAPACITY
-        ) {
-            await editMessage(
-                chatId,
-                messageId,
-                `❌ На дату ${state.data.flightDate} маршрут ${route} заполнен: ${CAPACITY}/${CAPACITY}.`,
-                getRouteKeyboard()
-            );
-
-            return;
-        }
-
-        state.data.route =
-            route;
-
-        state.step = 9;
-
-        await showStatusMenu(
-            chatId,
-            state
-        );
-
-        return;
-    }
-
-
-    /* =========================================
-       STATUS — REGISTRATION
-    ========================================= */
-
-    if (
-        state.step === 9 &&
-        (
-            data ===
-                "status_booked" ||
-            data ===
-                "status_confirmed" ||
-            data ===
-                "status_cancelled"
-        )
-    ) {
-        if (
-            data ===
-            "status_booked"
-        ) {
-            state.data.status =
-                "Забронирован";
-        }
-
-        if (
-            data ===
-            "status_confirmed"
-        ) {
-            state.data.status =
-                "Подтвержден";
-        }
-
-        if (
-            data ===
-            "status_cancelled"
-        ) {
-            state.data.status =
-                "Отменен";
-        }
-
-        await finishRegistration(
-            chatId,
-            state
-        );
-
-        return;
-    }
-
-
-    /* =========================================
        EDIT MENU
+       ВАЖНО: ЭТОТ БЛОК ИДЁТ
+       ДО REGISTRATION ROUTE/STATUS
     ========================================= */
 
     if (
         data ===
         "passenger_edit"
+    ) {
+        await showEditMenu(
+            chatId,
+            state
+        );
+
+        return;
+    }
+
+    if (
+        data ===
+        "view_passenger_edit"
     ) {
         await showEditMenu(
             chatId,
@@ -3839,6 +3960,29 @@ async function handleCallbackQuery(
         return;
     }
 
+
+    /* =========================================
+       EDIT MENU BACK
+       ГЛАВНАЯ ИСПРАВЛЕННАЯ КНОПКА
+    ========================================= */
+
+    if (
+        data ===
+        "edit_menu_back"
+    ) {
+        await showPassengerCard(
+            chatId,
+            state
+        );
+
+        return;
+    }
+
+
+    /* =========================================
+       BACK FROM EDIT SUBMENUS
+    ========================================= */
+
     if (
         data ===
         "edit_back"
@@ -3851,23 +3995,31 @@ async function handleCallbackQuery(
         return;
     }
 
+
+    /* =========================================
+       EDIT TEXT FIELDS
+    ========================================= */
+
     if (
         data ===
-        "edit_surname" ||
+            "edit_surname" ||
         data ===
-        "edit_name" ||
+            "edit_name" ||
         data ===
-        "edit_patronymic" ||
+            "edit_patronymic" ||
         data ===
-        "edit_passport"
+            "edit_passport"
     ) {
         const fields = {
             edit_surname:
                 "surname",
+
             edit_name:
                 "name",
+
             edit_patronymic:
                 "patronymic",
+
             edit_passport:
                 "passport"
         };
@@ -3881,10 +4033,13 @@ async function handleCallbackQuery(
         const labels = {
             surname:
                 "Введите новую фамилию:",
+
             name:
                 "Введите новое имя:",
+
             patronymic:
                 "Введите новое отчество:",
+
             passport:
                 "Введите новый номер паспорта:"
         };
@@ -3897,6 +4052,11 @@ async function handleCallbackQuery(
 
         return;
     }
+
+
+    /* =========================================
+       EDIT BIRTH DATE
+    ========================================= */
 
     if (
         data ===
@@ -3919,6 +4079,11 @@ async function handleCallbackQuery(
         return;
     }
 
+
+    /* =========================================
+       EDIT FLIGHT DATE
+    ========================================= */
+
     if (
         data ===
         "edit_flightDate"
@@ -3940,6 +4105,11 @@ async function handleCallbackQuery(
         return;
     }
 
+
+    /* =========================================
+       EDIT CITIZENSHIP MENU
+    ========================================= */
+
     if (
         data ===
         "edit_citizenship"
@@ -3951,6 +4121,11 @@ async function handleCallbackQuery(
 
         return;
     }
+
+
+    /* =========================================
+       EDIT CONTACT MENU
+    ========================================= */
 
     if (
         data ===
@@ -4098,27 +4273,47 @@ async function handleCallbackQuery(
             chatId,
             messageId,
             "Выберите новый маршрут:",
-            getRouteKeyboard()
+            {
+                inline_keyboard: [
+                    [
+                        {
+                            text: "ДШБ — ХРГ",
+                            callback_data:
+                                "edit_route_DSHB_XRG"
+                        }
+                    ],
+                    [
+                        {
+                            text: "ХРГ — ДШБ",
+                            callback_data:
+                                "edit_route_XRG_DSHB"
+                        }
+                    ],
+                    [
+                        {
+                            text: "↩️ Назад",
+                            callback_data:
+                                "edit_back"
+                        }
+                    ]
+                ]
+            }
         );
 
         return;
     }
 
+
+    /* =========================================
+       EDIT ROUTE — DSHB → XRG
+    ========================================= */
+
     if (
-        state.editingField ===
-            "route" &&
-        (
-            data ===
-                "route_DSHB_XRG" ||
-            data ===
-                "route_XRG_DSHB"
-        )
+        data ===
+        "edit_route_DSHB_XRG"
     ) {
         const route =
-            data ===
-                "route_DSHB_XRG"
-                ? "ДШБ — ХРГ"
-                : "ХРГ — ДШБ";
+            "ДШБ — ХРГ";
 
         if (
             state.data.status !==
@@ -4132,7 +4327,72 @@ async function handleCallbackQuery(
                 );
 
             if (
-                occupancy >= CAPACITY
+                occupancy >=
+                CAPACITY
+            ) {
+                await editMessage(
+                    chatId,
+                    messageId,
+                    `❌ На дату ${state.data.flightDate} маршрут ${route} заполнен: ${CAPACITY}/${CAPACITY}.`,
+                    {
+                        inline_keyboard: [
+                            [
+                                {
+                                    text: "↩️ Назад",
+                                    callback_data:
+                                        "edit_back"
+                                }
+                            ]
+                        ]
+                    }
+                );
+
+                return;
+            }
+        }
+
+        state.data.route =
+            route;
+
+        await updatePassenger(
+            state.rowNumber,
+            state.data
+        );
+
+        await showEditMenu(
+            chatId,
+            state
+        );
+
+        return;
+    }
+
+
+    /* =========================================
+       EDIT ROUTE — XRG → DSHB
+    ========================================= */
+
+    if (
+        data ===
+        "edit_route_XRG_DSHB"
+    ) {
+        const route =
+            "ХРГ — ДШБ";
+
+        if (
+            state.data.status !==
+            "Отменен"
+        ) {
+            const occupancy =
+                await calculateRouteOccupancy(
+                    state.data.flightDate,
+                    route,
+                    state.rowNumber
+                );
+
+            if (
+                occupancy >=
+                CAPACITY
             ) {
                 await editMessage(
                     chatId,
@@ -4187,83 +4447,84 @@ async function handleCallbackQuery(
             chatId,
             messageId,
             "Выберите новый статус:",
-            getStatusKeyboard()
+            {
+                inline_keyboard: [
+                    [
+                        {
+                            text: "Забронирован",
+                            callback_data:
+                                "edit_status_booked"
+                        }
+                    ],
+                    [
+                        {
+                            text: "Подтвержден",
+                            callback_data:
+                                "edit_status_confirmed"
+                        }
+                    ],
+                    [
+                        {
+                            text: "Отменен",
+                            callback_data:
+                                "edit_status_cancelled"
+                        }
+                    ],
+                    [
+                        {
+                            text: "↩️ Назад",
+                            callback_data:
+                                "edit_back"
+                        }
+                    ]
+                ]
+            }
         );
 
         return;
     }
 
+
+    /* =========================================
+       EDIT STATUS — BOOKED
+    ========================================= */
+
     if (
-        state.editingField ===
-            "status" &&
-        (
-            data ===
-                "status_booked" ||
-            data ===
-                "status_confirmed" ||
-            data ===
-                "status_cancelled"
-        )
+        data ===
+        "edit_status_booked"
     ) {
-        let status;
+        const status =
+            "Забронирован";
+
+        const occupancy =
+            await calculateRouteOccupancy(
+                state.data.flightDate,
+                state.data.route,
+                state.rowNumber
+            );
 
         if (
-            data ===
-            "status_booked"
+            occupancy >=
+            CAPACITY
         ) {
-            status =
-                "Забронирован";
-        }
-
-        if (
-            data ===
-            "status_confirmed"
-        ) {
-            status =
-                "Подтвержден";
-        }
-
-        if (
-            data ===
-            "status_cancelled"
-        ) {
-            status =
-                "Отменен";
-        }
-
-        if (
-            status !==
-            "Отменен"
-        ) {
-            const occupancy =
-                await calculateRouteOccupancy(
-                    state.data.flightDate,
-                    state.data.route,
-                    state.rowNumber
-                );
-
-            if (
-                occupancy >= CAPACITY
-            ) {
-                await editMessage(
-                    chatId,
-                    messageId,
-                    `❌ На дату ${state.data.flightDate} маршрут ${state.data.route} заполнен: ${CAPACITY}/${CAPACITY}.`,
-                    {
-                        inline_keyboard: [
-                            [
-                                {
-                                    text: "↩️ Назад",
-                                    callback_data:
-                                        "edit_back"
-                                }
-                            ]
+            await editMessage(
+                chatId,
+                messageId,
+                `❌ На дату ${state.data.flightDate} маршрут ${state.data.route} заполнен: ${CAPACITY}/${CAPACITY}.`,
+                {
+                    inline_keyboard: [
+                        [
+                            {
+                                text: "↩️ Назад",
+                                callback_data:
+                                    "edit_back"
+                            }
                         ]
-                    }
-                );
+                    ]
+                }
+            );
 
-                return;
-            }
+            return;
         }
 
         state.data.status =
@@ -4275,6 +4536,211 @@ async function handleCallbackQuery(
         );
 
         await showEditMenu(
+            chatId,
+            state
+        );
+
+        return;
+    }
+
+
+    /* =========================================
+       EDIT STATUS — CONFIRMED
+    ========================================= */
+
+    if (
+        data ===
+        "edit_status_confirmed"
+    ) {
+        const status =
+            "Подтвержден";
+
+        const occupancy =
+            await calculateRouteOccupancy(
+                state.data.flightDate,
+                state.data.route,
+                state.rowNumber
+            );
+
+        if (
+            occupancy >=
+            CAPACITY
+        ) {
+            await editMessage(
+                chatId,
+                messageId,
+                `❌ На дату ${state.data.flightDate} маршрут ${state.data.route} заполнен: ${CAPACITY}/${CAPACITY}.`,
+                {
+                    inline_keyboard: [
+                        [
+                            {
+                                text: "↩️ Назад",
+                                callback_data:
+                                    "edit_back"
+                            }
+                        ]
+                    ]
+                }
+            );
+
+            return;
+        }
+
+        state.data.status =
+            status;
+
+        await updatePassenger(
+            state.rowNumber,
+            state.data
+        );
+
+        await showEditMenu(
+            chatId,
+            state
+        );
+
+        return;
+    }
+
+
+    /* =========================================
+       EDIT STATUS — CANCELLED
+    ========================================= */
+
+    if (
+        data ===
+        "edit_status_cancelled"
+    ) {
+        state.data.status =
+            "Отменен";
+
+        await updatePassenger(
+            state.rowNumber,
+            state.data
+        );
+
+        await showEditMenu(
+            chatId,
+            state
+        );
+
+        return;
+    }
+
+
+    /* =========================================
+       REGISTRATION ROUTE
+       ЭТОТ БЛОК ОСТАЁТСЯ ПОСЛЕ EDIT
+    ========================================= */
+
+    if (
+        state.step === 8 &&
+        (
+            data ===
+                "route_DSHB_XRG" ||
+            data ===
+                "route_XRG_DSHB"
+        )
+    ) {
+        const route =
+            data ===
+                "route_DSHB_XRG"
+                ? "ДШБ — ХРГ"
+                : "ХРГ — ДШБ";
+
+        const occupancy =
+            await calculateRouteOccupancy(
+                state.data.flightDate,
+                route
+            );
+
+        if (
+            occupancy >=
+            CAPACITY
+        ) {
+            await editMessage(
+                chatId,
+                messageId,
+                `❌ На дату ${state.data.flightDate} маршрут ${route} заполнен: ${CAPACITY}/${CAPACITY}.`,
+                getRouteKeyboard()
+            );
+
+            return;
+        }
+
+        state.data.route =
+            route;
+
+        state.step = 9;
+
+        await showStatusMenu(
+            chatId,
+            state
+        );
+
+        return;
+    }
+
+
+    /* =========================================
+       REGISTRATION STATUS
+    ========================================= */
+
+    if (
+        state.step === 9 &&
+        (
+            data ===
+                "status_booked" ||
+            data ===
+                "status_confirmed" ||
+            data ===
+                "status_cancelled"
+        )
+    ) {
+        if (
+            data ===
+            "status_booked"
+        ) {
+            state.data.status =
+                "Забронирован";
+        }
+
+        if (
+            data ===
+            "status_confirmed"
+        ) {
+            state.data.status =
+                "Подтвержден";
+        }
+
+        if (
+            data ===
+            "status_cancelled"
+        ) {
+            state.data.status =
+                "Отменен";
+        }
+
+        await finishRegistration(
+            chatId,
+            state
+        );
+
+        return;
+    }
+
+
+    /* =========================================
+       REGISTRATION BACK TO ROUTE
+    ========================================= */
+
+    if (
+        data ===
+        "registration_back_route"
+    ) {
+        state.step = 8;
+
+        await showRouteMenu(
             chatId,
             state
         );
@@ -4305,7 +4771,9 @@ app.post(
                 "🚫 Заблокирован запрос с неверным webhook secret"
             );
 
-            return res.sendStatus(403);
+            return res.sendStatus(
+                403
+            );
         }
 
         console.log(
@@ -4381,6 +4849,7 @@ async function setupWebhook() {
         console.error(
             "❌ TELEGRAM_WEBHOOK_SECRET не установлен!"
         );
+
         return;
     }
 
@@ -4388,6 +4857,7 @@ async function setupWebhook() {
         console.error(
             "❌ PUBLIC_URL не установлен!"
         );
+
         return;
     }
 
