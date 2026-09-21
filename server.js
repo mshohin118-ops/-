@@ -628,15 +628,15 @@ function getCalendarTitle(
 
     if (type === "flight") {
         if (level === "year") {
-            return "📅 Выберите год даты рейса:";
+            return "📅 Выберите дату рейса:";
         }
 
         if (level === "month") {
-            return "📅 Выберите месяц даты рейса:";
+            return "📅 Выберите дату рейса:";
         }
 
         if (level === "day") {
-            return "📅 Выберите день даты рейса:";
+            return "📅 Выберите дату рейса:";
         }
     }
 
