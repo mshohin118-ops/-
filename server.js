@@ -79,6 +79,7 @@ const REQUIRED_EXCEL_HEADERS = [
     "Контакт 2",
     "Дата рейса",
     "Маршрут",
+    "Рейс",
     "Статус"
 ];
 
@@ -291,7 +292,7 @@ async function getAllPassengers() {
                 SPREADSHEET_ID,
 
             range:
-                `${sheetTitle}!A:L`
+                `${sheetTitle}!A:M`
         });
 
     return result.data.values || [];
@@ -307,6 +308,13 @@ function normalizeText(value) {
 }
 
 function normalizePassport(value) {
+    return String(value || "")
+        .trim()
+        .replace(/\s+/g, "")
+        .toUpperCase();
+}
+
+function normalizeFlight(value) {
     return String(value || "")
         .trim()
         .replace(/\s+/g, "")
@@ -331,7 +339,8 @@ function createState() {
         viewPage: 0,
         viewPassengers: [],
         viewDate: null,
-        viewRoute: null
+        viewRoute: null,
+        viewFlight: null
     };
 }
 
@@ -606,10 +615,20 @@ async function askRegistrationStep(
             chatId,
             state
         );
+
         return;
     }
 
     if (state.step === 9) {
+        await showFlightNumberMenu(
+            chatId,
+            state
+        );
+
+        return;
+    }
+
+    if (state.step === 10) {
         await showStatusMenu(
             chatId,
             state
@@ -802,6 +821,22 @@ async function showRouteMenu(
 
 
 /* =========================================================
+   FLIGHT NUMBER
+========================================================= */
+
+async function showFlightNumberMenu(
+    chatId,
+    state
+) {
+    await editMessage(
+        chatId,
+        state.messageId,
+        "✈️ Введите номер рейса:\n\nНапример: DW101"
+    );
+}
+
+
+/* =========================================================
    STATUS
 ========================================================= */
 
@@ -862,6 +897,10 @@ function getBaseCalendarType(type) {
         return "flight";
     }
 
+    if (type === "flight_filter_date") {
+        return "flight_filter_date";
+    }
+
     return type;
 }
 
@@ -884,7 +923,10 @@ function getCalendarTitle(
         return "🎂 Выберите день рождения:";
     }
 
-    if (base === "flight") {
+    if (
+        base === "flight" ||
+        base === "flight_filter_date"
+    ) {
         return "📅 Выберите дату рейса:";
     }
 
@@ -1222,6 +1264,7 @@ async function showCalendar(
 async function calculateRouteOccupancy(
     flightDate,
     route,
+    flight,
     excludeRowNumber = null
 ) {
     const rows =
@@ -1229,6 +1272,10 @@ async function calculateRouteOccupancy(
 
     let count = 0;
 
+    /*
+     * Вместимость считается отдельно для:
+     * Дата + Маршрут + Рейс
+     */
     for (
         let i = 1;
         i < rows.length;
@@ -1251,7 +1298,9 @@ async function calculateRouteOccupancy(
         if (
             (row[9] || "") === flightDate &&
             (row[10] || "") === route &&
-            (row[11] || "") !== "Отменен"
+            normalizeFlight(row[11]) ===
+                normalizeFlight(flight) &&
+            (row[12] || "") !== "Отменен"
         ) {
             count++;
         }
@@ -1284,6 +1333,7 @@ async function savePassenger(data) {
         data.contact2 || "",
         data.flightDate || "",
         data.route || "",
+        data.flight || "",
         data.status || ""
     ];
 
@@ -1292,7 +1342,7 @@ async function savePassenger(data) {
             SPREADSHEET_ID,
 
         range:
-            `${sheetTitle}!A:L`,
+            `${sheetTitle}!A:M`,
 
         valueInputOption:
             "USER_ENTERED",
@@ -1336,6 +1386,7 @@ async function updatePassenger(
         data.contact2 || "",
         data.flightDate || "",
         data.route || "",
+        data.flight || "",
         data.status || ""
     ];
 
@@ -1344,7 +1395,7 @@ async function updatePassenger(
             SPREADSHEET_ID,
 
         range:
-            `${sheetTitle}!A${rowNumber}:L${rowNumber}`,
+            `${sheetTitle}!A${rowNumber}:M${rowNumber}`,
 
         valueInputOption:
             "USER_ENTERED",
@@ -1374,6 +1425,7 @@ function buildPassengerCard(data) {
         `Контакт 2: ${data.contact2 || "—"}\n` +
         `Дата рейса: ${data.flightDate || "—"}\n` +
         `Маршрут: ${data.route || "—"}\n` +
+        `✈️ Рейс: ${data.flight || "—"}\n` +
         `Статус: ${data.status || "—"}`
     );
 }
@@ -1497,6 +1549,13 @@ function getEditMenuKeyboard() {
                     text: "✏️ Маршрут",
                     callback_data:
                         "edit_route"
+                }
+            ],
+            [
+                {
+                    text: "✏️ Рейс",
+                    callback_data:
+                        "edit_flight"
                 }
             ],
             [
@@ -1636,22 +1695,23 @@ async function finishRegistration(
         const occupancy =
             await calculateRouteOccupancy(
                 state.data.flightDate,
-                state.data.route
+                state.data.route,
+                state.data.flight
             );
 
         if (occupancy >= CAPACITY) {
             await editMessage(
                 chatId,
                 state.messageId,
-                `❌ На дату ${state.data.flightDate} маршрут ${state.data.route} заполнен: ${CAPACITY}/${CAPACITY}.`,
+                `❌ Рейс ${state.data.flight} на дату ${state.data.flightDate} по маршруту ${state.data.route} заполнен: ${CAPACITY}/${CAPACITY}.`,
                 {
                     inline_keyboard: [
                         [
                             {
                                 text:
-                                    "↩️ Выбрать другой маршрут",
+                                    "↩️ Выбрать другой рейс",
                                 callback_data:
-                                    "registration_back_route"
+                                    "registration_back_flight"
                             }
                         ]
                     ]
@@ -1782,6 +1842,7 @@ async function showViewDataMenu(
     state.editingField = null;
     state.viewDate = null;
     state.viewRoute = null;
+    state.viewFlight = null;
 
     await editMessage(
         chatId,
@@ -1809,7 +1870,8 @@ function rowToPassenger(
         contact2: row[8] || "",
         flightDate: row[9] || "",
         route: row[10] || "",
-        status: row[11] || ""
+        flight: row[11] || "",
+        status: row[12] || ""
     };
 }
 
@@ -1906,6 +1968,12 @@ function getPassengerListText(
                     "—"
                 } | ${
                     passenger.route ||
+                    "—"
+                }\n`;
+
+            text +=
+                `   ✈️ Рейс: ${
+                    passenger.flight ||
                     "—"
                 }\n`;
 
@@ -2125,6 +2193,80 @@ async function showPassengersFiltered(
             0,
             prefix
         )
+    );
+}
+
+
+/* =========================================================
+   PASSENGERS BY FLIGHT
+========================================================= */
+
+async function showFlightPassengersStart(
+    chatId,
+    state
+) {
+    state.viewMode =
+        "flight_filter_date";
+
+    state.calendarType =
+        "flight_filter_date";
+
+    state.calendarPage = 0;
+
+    await showCalendar(
+        chatId,
+        state,
+        "year"
+    );
+}
+
+async function showFlightFilterRoute(
+    chatId,
+    state
+) {
+    await editMessage(
+        chatId,
+        state.messageId,
+        "✈️ Выберите маршрут:",
+        {
+            inline_keyboard: [
+                [
+                    {
+                        text:
+                            "ДШБ — ХРГ",
+                        callback_data:
+                            "flight_filter_route_DSHB_XRG"
+                    }
+                ],
+                [
+                    {
+                        text:
+                            "ХРГ — ДШБ",
+                        callback_data:
+                            "flight_filter_route_XRG_DSHB"
+                    }
+                ],
+                [
+                    {
+                        text:
+                            "↩️ Назад",
+                        callback_data:
+                            "main_menu_back"
+                    }
+                ]
+            ]
+        }
+    );
+}
+
+async function showFlightFilterNumber(
+    chatId,
+    state
+) {
+    await editMessage(
+        chatId,
+        state.messageId,
+        "✈️ Введите номер рейса:"
     );
 }
 
@@ -2411,6 +2553,13 @@ function normalizeExcelRoute(value) {
     return "";
 }
 
+function normalizeExcelFlight(value) {
+    return String(value || "")
+        .trim()
+        .replace(/\s+/g, "")
+        .toUpperCase();
+}
+
 function normalizeExcelStatus(value) {
     const text =
         String(value || "")
@@ -2690,7 +2839,7 @@ async function handleExcelDocument(
                 "Отменен"
             ) {
                 const key =
-                    `${passenger.flightDate}|${passenger.route}`;
+                    `${passenger.flightDate}|${passenger.route}|${normalizeFlight(passenger.flight)}`;
 
                 occupancyMap.set(
                     key,
@@ -2816,6 +2965,11 @@ async function handleExcelDocument(
                     getValue("Маршрут")
                 );
 
+            const flight =
+                normalizeExcelFlight(
+                    getValue("Рейс")
+                );
+
             const status =
                 normalizeExcelStatus(
                     getValue("Статус")
@@ -2881,6 +3035,12 @@ async function handleExcelDocument(
                 );
             }
 
+            if (!flight) {
+                rowErrors.push(
+                    "не указан номер рейса"
+                );
+            }
+
             if (!status) {
                 rowErrors.push(
                     "неверный статус"
@@ -2915,11 +3075,6 @@ async function handleExcelDocument(
                 continue;
             }
 
-            /*
-             * Добавляем паспорт в Set сразу.
-             * Поэтому дубликаты внутри самого Excel
-             * тоже будут обнаружены.
-             */
             existingPassports.add(
                 passportKey
             );
@@ -2929,7 +3084,7 @@ async function handleExcelDocument(
             ===================================== */
 
             const occupancyKey =
-                `${flightDate}|${route}`;
+                `${flightDate}|${route}|${normalizeFlight(flight)}`;
 
             const currentOccupancy =
                 occupancyMap.get(
@@ -2944,7 +3099,7 @@ async function handleExcelDocument(
                 capacityFull++;
 
                 errorRows.push(
-                    `Строка ${excelRowNumber}: ${flightDate} ${route} заполнен (${CAPACITY}/${CAPACITY})`
+                    `Строка ${excelRowNumber}: рейс ${flight} на ${flightDate} ${route} заполнен (${CAPACITY}/${CAPACITY})`
                 );
 
                 continue;
@@ -2979,6 +3134,7 @@ async function handleExcelDocument(
                 contact2,
                 flightDate,
                 route,
+                flight,
                 status
             ]);
 
@@ -3012,7 +3168,7 @@ async function handleExcelDocument(
                     SPREADSHEET_ID,
 
                 range:
-                    `${sheetTitle}!A:L`,
+                    `${sheetTitle}!A:M`,
 
                 valueInputOption:
                     "USER_ENTERED",
@@ -3440,6 +3596,171 @@ async function handleTextMessage(
 
 
     /* =========================================
+       PASSENGERS BY FLIGHT
+    ========================================= */
+
+    if (
+        state.viewMode ===
+        "flight_filter_number"
+    ) {
+        const flight =
+            normalizeFlight(text);
+
+        if (!flight) {
+            await editMessage(
+                chatId,
+                state.messageId,
+                "❌ Введите номер рейса."
+            );
+
+            return;
+        }
+
+        const passengers =
+            await getPassengerObjects();
+
+        const filtered =
+            passengers.filter(
+                passenger =>
+                    passenger.flightDate ===
+                        state.viewDate &&
+                    passenger.route ===
+                        state.viewRoute &&
+                    normalizeFlight(
+                        passenger.flight
+                    ) === flight
+            );
+
+        state.viewFlight =
+            flight;
+
+        state.viewMode =
+            "flight_result";
+
+        await showPassengersFiltered(
+            chatId,
+            state,
+            filtered,
+            `✈️ Рейс ${flight}\n📅 ${state.viewDate}\n🛫 ${state.viewRoute}`,
+            "flight"
+        );
+
+        return;
+    }
+
+
+    /* =========================================
+       FLIGHT NUMBER REGISTRATION
+    ========================================= */
+
+    if (
+        state.step === 9
+    ) {
+        const flight =
+            normalizeFlight(text);
+
+        if (!flight) {
+            await editMessage(
+                chatId,
+                state.messageId,
+                "❌ Номер рейса не может быть пустым.\n\nВведите номер рейса, например: DW101"
+            );
+
+            return;
+        }
+
+        state.data.flight =
+            flight;
+
+        state.step = 10;
+
+        await showStatusMenu(
+            chatId,
+            state
+        );
+
+        return;
+    }
+
+
+    /* =========================================
+       EDIT FLIGHT
+    ========================================= */
+
+    if (
+        state.editingField ===
+        "flight"
+    ) {
+        const newFlight =
+            normalizeFlight(text);
+
+        if (!newFlight) {
+            await editMessage(
+                chatId,
+                state.messageId,
+                "❌ Номер рейса не может быть пустым.\n\nВведите номер рейса:"
+            );
+
+            return;
+        }
+
+        if (
+            state.data.status !==
+            "Отменен"
+        ) {
+            const occupancy =
+                await calculateRouteOccupancy(
+                    state.data.flightDate,
+                    state.data.route,
+                    newFlight,
+                    state.rowNumber
+                );
+
+            if (
+                occupancy >= CAPACITY
+            ) {
+                await editMessage(
+                    chatId,
+                    state.messageId,
+                    `❌ Рейс ${newFlight} на дату ${state.data.flightDate} по маршруту ${state.data.route} заполнен: ${CAPACITY}/${CAPACITY}.`,
+                    {
+                        inline_keyboard: [
+                            [
+                                {
+                                    text:
+                                        "↩️ Назад",
+                                    callback_data:
+                                        "edit_back"
+                                }
+                            ]
+                        ]
+                    }
+                );
+
+                return;
+            }
+        }
+
+        state.data.flight =
+            newFlight;
+
+        await updatePassenger(
+            state.rowNumber,
+            state.data
+        );
+
+        state.editingField = null;
+
+        await showEditMenu(
+            chatId,
+            state
+        );
+
+        return;
+    }
+
+
+    /* =========================================
        EDIT TEXT
     ========================================= */
 
@@ -3642,6 +3963,7 @@ async function handleCallbackQuery(
             "Контакт 2\n" +
             "Дата рейса\n" +
             "Маршрут\n" +
+            "Рейс\n" +
             "Статус",
             {
                 inline_keyboard: [
@@ -3669,11 +3991,52 @@ async function handleCallbackQuery(
         data ===
         "main_view_data" ||
         data ===
-        "main_find_passenger" ||
+        "main_find_passenger"
+    ) {
+        await showViewDataMenu(
+            chatId,
+            state
+        );
+
+        return;
+    }
+
+
+    /* =========================================
+       PASSENGERS BY FLIGHT
+    ========================================= */
+
+    if (
         data ===
         "main_flight_passengers"
     ) {
-        await showViewDataMenu(
+        await showFlightPassengersStart(
+            chatId,
+            state
+        );
+
+        return;
+    }
+
+    if (
+        data ===
+        "flight_filter_route_DSHB_XRG" ||
+        data ===
+        "flight_filter_route_XRG_DSHB"
+    ) {
+        const route =
+            data ===
+            "flight_filter_route_DSHB_XRG"
+                ? "ДШБ — ХРГ"
+                : "ХРГ — ДШБ";
+
+        state.viewRoute =
+            route;
+
+        state.viewMode =
+            "flight_filter_number";
+
+        await showFlightFilterNumber(
             chatId,
             state
         );
@@ -3717,6 +4080,75 @@ async function handleCallbackQuery(
                     "Отменен"
             ).length;
 
+        const flightMap =
+            new Map();
+
+        passengers.forEach(
+            passenger => {
+                const key =
+                    `${passenger.flightDate}|${passenger.route}|${normalizeFlight(passenger.flight)}`;
+
+                if (
+                    !flightMap.has(key)
+                ) {
+                    flightMap.set(
+                        key,
+                        {
+                            date:
+                                passenger.flightDate,
+                            route:
+                                passenger.route,
+                            flight:
+                                passenger.flight,
+                            total: 0,
+                            booked: 0,
+                            confirmed: 0,
+                            cancelled: 0
+                        }
+                    );
+                }
+
+                const item =
+                    flightMap.get(key);
+
+                item.total++;
+
+                if (
+                    passenger.status ===
+                    "Забронирован"
+                ) {
+                    item.booked++;
+                }
+
+                if (
+                    passenger.status ===
+                    "Подтвержден"
+                ) {
+                    item.confirmed++;
+                }
+
+                if (
+                    passenger.status ===
+                    "Отменен"
+                ) {
+                    item.cancelled++;
+                }
+            }
+        );
+
+        let flightStatistics =
+            "";
+
+        for (
+            const item
+            of flightMap.values()
+        ) {
+            flightStatistics +=
+                `\n✈️ ${item.flight || "—"} | ${item.date || "—"}\n` +
+                `${item.route || "—"}\n` +
+                `👥 ${item.total} | 🟡 ${item.booked} | 🟢 ${item.confirmed} | 🔴 ${item.cancelled}\n`;
+        }
+
         await editMessage(
             chatId,
             messageId,
@@ -3724,7 +4156,13 @@ async function handleCallbackQuery(
             `👥 Всего пассажиров: ${total}\n` +
             `🟡 Забронировано: ${booked}\n` +
             `🟢 Подтверждено: ${confirmed}\n` +
-            `🔴 Отменено: ${cancelled}`,
+            `🔴 Отменено: ${cancelled}\n\n` +
+            "━━━━━━━━━━━━━━\n" +
+            "✈️ По рейсам:" +
+            (
+                flightStatistics ||
+                "\n\nРейсов пока нет."
+            ),
             {
                 inline_keyboard: [
                     [
@@ -3995,6 +4433,126 @@ async function handleCallbackQuery(
 
 
     /* =========================================
+       DATE FILTER
+    ========================================= */
+
+    if (
+        data.startsWith(
+            "date_page_"
+        )
+    ) {
+        const page =
+            Number(
+                data.replace(
+                    "date_page_",
+                    ""
+                )
+            );
+
+        const passengers =
+            state.viewPassengers || [];
+
+        state.viewPage =
+            page;
+
+        await editMessage(
+            chatId,
+            state.messageId,
+            getPassengerListText(
+                passengers,
+                page,
+                `📅 Пассажиры на ${
+                    state.viewDate || ""
+                }`
+            ),
+            getPassengerListKeyboard(
+                passengers,
+                page,
+                "date"
+            )
+        );
+
+        return;
+    }
+
+    if (
+        data.startsWith(
+            "date_passenger_"
+        )
+    ) {
+        await showViewedPassenger(
+            chatId,
+            state,
+            data.replace(
+                "date_passenger_",
+                ""
+            )
+        );
+
+        return;
+    }
+
+
+    /* =========================================
+       FLIGHT FILTER RESULT
+    ========================================= */
+
+    if (
+        data.startsWith(
+            "flight_page_"
+        )
+    ) {
+        const page =
+            Number(
+                data.replace(
+                    "flight_page_",
+                    ""
+                )
+            );
+
+        const passengers =
+            state.viewPassengers || [];
+
+        state.viewPage =
+            page;
+
+        await editMessage(
+            chatId,
+            state.messageId,
+            getPassengerListText(
+                passengers,
+                page,
+                `✈️ Рейс ${state.viewFlight || ""}\n📅 ${state.viewDate || ""}\n🛫 ${state.viewRoute || ""}`
+            ),
+            getPassengerListKeyboard(
+                passengers,
+                page,
+                "flight"
+            )
+        );
+
+        return;
+    }
+
+    if (
+        data.startsWith(
+            "flight_passenger_"
+        )
+    ) {
+        await showViewedPassenger(
+            chatId,
+            state,
+            data.replace(
+                "flight_passenger_",
+                ""
+            )
+        );
+
+        return;
+    }
+
+
+    /* =========================================
        SEARCH RESULT
     ========================================= */
 
@@ -4077,18 +4635,51 @@ async function handleCallbackQuery(
         const passengers =
             state.viewPassengers || [];
 
+        let title =
+            "🔎 Результат поиска";
+
+        let prefix =
+            "search";
+
+        if (
+            state.viewMode ===
+            "flight_result"
+        ) {
+            title =
+                `✈️ Рейс ${state.viewFlight || ""}\n📅 ${state.viewDate || ""}\n🛫 ${state.viewRoute || ""}`;
+
+            prefix =
+                "flight";
+        } else if (
+            state.viewDate
+        ) {
+            title =
+                `📅 Пассажиры на ${state.viewDate}`;
+
+            prefix =
+                "date";
+        } else if (
+            state.viewRoute
+        ) {
+            title =
+                `✈️ Пассажиры: ${state.viewRoute}`;
+
+            prefix =
+                "route";
+        }
+
         await editMessage(
             chatId,
             state.messageId,
             getPassengerListText(
                 passengers,
                 state.viewPage || 0,
-                "🔎 Результат поиска"
+                title
             ),
             getPassengerListKeyboard(
                 passengers,
                 state.viewPage || 0,
-                "search"
+                prefix
             )
         );
 
@@ -4285,6 +4876,7 @@ async function handleCallbackQuery(
                     await calculateRouteOccupancy(
                         state.data.flightDate,
                         state.data.route,
+                        state.data.flight,
                         state.rowNumber
                     );
 
@@ -4297,7 +4889,7 @@ async function handleCallbackQuery(
                     await editMessage(
                         chatId,
                         state.messageId,
-                        `❌ На дату ${date} маршрут ${state.data.route} заполнен: ${CAPACITY}/${CAPACITY}.`,
+                        `❌ Рейс ${state.data.flight} на дату ${date} по маршруту ${state.data.route} заполнен: ${CAPACITY}/${CAPACITY}.`,
                         {
                             inline_keyboard: [
                                 [
@@ -4363,6 +4955,26 @@ async function handleCallbackQuery(
                 filtered,
                 `📅 Пассажиры на ${date}`,
                 "date"
+            );
+
+            return;
+        }
+
+        /* FLIGHT FILTER DATE */
+
+        if (
+            state.calendarType ===
+            "flight_filter_date"
+        ) {
+            state.viewDate =
+                date;
+
+            state.viewMode =
+                "flight_filter_route";
+
+            await showFlightFilterRoute(
+                chatId,
+                state
             );
 
             return;
@@ -4529,7 +5141,7 @@ async function handleCallbackQuery(
 
         state.step = 9;
 
-        await showStatusMenu(
+        await showFlightNumberMenu(
             chatId,
             state
         );
@@ -4547,7 +5159,26 @@ async function handleCallbackQuery(
 
         state.step = 9;
 
-        await showStatusMenu(
+        await showFlightNumberMenu(
+            chatId,
+            state
+        );
+
+        return;
+    }
+
+
+    /* =========================================
+       REGISTRATION BACK TO FLIGHT
+    ========================================= */
+
+    if (
+        data ===
+        "registration_back_flight"
+    ) {
+        state.step = 9;
+
+        await showFlightNumberMenu(
             chatId,
             state
         );
@@ -4561,7 +5192,7 @@ async function handleCallbackQuery(
     ========================================= */
 
     if (
-        state.step === 9 &&
+        state.step === 10 &&
         (
             data ===
                 "status_booked" ||
@@ -4768,6 +5399,27 @@ async function handleCallbackQuery(
 
 
     /* =========================================
+       EDIT FLIGHT NUMBER
+    ========================================= */
+
+    if (
+        data ===
+        "edit_flight"
+    ) {
+        state.editingField =
+            "flight";
+
+        await editMessage(
+            chatId,
+            messageId,
+            "✈️ Введите новый номер рейса:"
+        );
+
+        return;
+    }
+
+
+    /* =========================================
        EDIT CITIZENSHIP
     ========================================= */
 
@@ -4941,6 +5593,7 @@ async function handleCallbackQuery(
             await calculateRouteOccupancy(
                 state.data.flightDate,
                 newRoute,
+                state.data.flight,
                 state.rowNumber
             );
 
@@ -4952,7 +5605,7 @@ async function handleCallbackQuery(
             await editMessage(
                 chatId,
                 messageId,
-                `❌ На дату ${state.data.flightDate} маршрут ${newRoute} заполнен: ${CAPACITY}/${CAPACITY}.`,
+                `❌ Рейс ${state.data.flight} на дату ${state.data.flightDate} по маршруту ${newRoute} заполнен: ${CAPACITY}/${CAPACITY}.`,
                 {
                     inline_keyboard: [
                         [
@@ -5046,10 +5699,26 @@ async function handleCallbackQuery(
         data ===
             "edit_status_confirmed"
     ) {
+        const newStatus =
+            data ===
+            "edit_status_booked"
+                ? "Забронирован"
+                : "Подтвержден";
+
+        /*
+         * Если пассажир уже был активным,
+         * исключаем его строку.
+         *
+         * Если пассажир был Отменен,
+         * он раньше не занимал место,
+         * поэтому строку тоже исключаем —
+         * это правильно.
+         */
         const occupancy =
             await calculateRouteOccupancy(
                 state.data.flightDate,
                 state.data.route,
+                state.data.flight,
                 state.rowNumber
             );
 
@@ -5059,7 +5728,7 @@ async function handleCallbackQuery(
             await editMessage(
                 chatId,
                 messageId,
-                `❌ На дату ${state.data.flightDate} маршрут ${state.data.route} заполнен: ${CAPACITY}/${CAPACITY}.`,
+                `❌ Рейс ${state.data.flight} на дату ${state.data.flightDate} по маршруту ${state.data.route} заполнен: ${CAPACITY}/${CAPACITY}.`,
                 {
                     inline_keyboard: [
                         [
@@ -5078,10 +5747,7 @@ async function handleCallbackQuery(
         }
 
         state.data.status =
-            data ===
-            "edit_status_booked"
-                ? "Забронирован"
-                : "Подтвержден";
+            newStatus;
 
         await updatePassenger(
             state.rowNumber,
@@ -5371,4 +6037,4 @@ app.listen(
 
         await setupWebhook();
     }
-); 
+);
