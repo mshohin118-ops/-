@@ -292,7 +292,7 @@ async function getAllPassengers() {
                 SPREADSHEET_ID,
 
             range:
-                `${sheetTitle}!A:M`
+                `${sheetTitle}!A:O`
         });
 
     return result.data.values || [];
@@ -594,6 +594,12 @@ async function askRegistrationStep(
             chatId,
             state
         );
+        return;
+    }
+
+    if (state.step === 7 && state.data.replacesPassengerId) {
+        state.step = 10;
+        await showStatusMenu(chatId, state);
         return;
     }
 
@@ -1261,6 +1267,10 @@ async function showCalendar(
    OCCUPANCY
 ========================================================= */
 
+function isInactiveStatus(status) {
+    return status === "Отменен" || status === "Не явился";
+}
+
 async function calculateRouteOccupancy(
     flightDate,
     route,
@@ -1300,7 +1310,7 @@ async function calculateRouteOccupancy(
             (row[10] || "") === route &&
             normalizeFlight(row[11]) ===
                 normalizeFlight(flight) &&
-            (row[12] || "") !== "Отменен"
+            !isInactiveStatus(row[12])
         ) {
             count++;
         }
@@ -1343,7 +1353,7 @@ async function saveRowsToFirstEmptyRows(rowsToInsert) {
         const row = rows[i] || [];
 
         const isEmpty = row
-            .slice(0, 13)
+            .slice(0, 15)
             .every(
                 cell =>
                     String(cell || "").trim() === ""
@@ -1371,7 +1381,7 @@ async function saveRowsToFirstEmptyRows(rowsToInsert) {
         if (emptyRows[i]) {
             writes.push({
                 range:
-                    `${sheetTitle}!A${emptyRows[i]}:M${emptyRows[i]}`,
+                    `${sheetTitle}!A${emptyRows[i]}:O${emptyRows[i]}`,
                 values: [values]
             });
 
@@ -1416,7 +1426,7 @@ async function saveRowsToFirstEmptyRows(rowsToInsert) {
                     SPREADSHEET_ID,
 
                 range:
-                    `${sheetTitle}!A:M`,
+                    `${sheetTitle}!A:O`,
 
                 valueInputOption:
                     "USER_ENTERED",
@@ -1441,7 +1451,7 @@ async function saveRowsToFirstEmptyRows(rowsToInsert) {
         if (updatedRange) {
             const match =
                 updatedRange.match(
-                    /!A(\d+):M(\d+)/
+                    /!A(\d+):O(\d+)/
                 );
 
             if (match) {
@@ -1498,7 +1508,9 @@ async function savePassenger(data) {
         data.flightDate || "",
         data.route || "",
         data.flight || "",
-        data.status || ""
+        data.status || "",
+        data.replacesPassengerId || "",
+        data.replacedByPassengerId || ""
     ];
 
     const rowNumbers =
@@ -1546,7 +1558,9 @@ async function updatePassenger(
         data.flightDate || "",
         data.route || "",
         data.flight || "",
-        data.status || ""
+        data.status || "",
+        data.replacesPassengerId || "",
+        data.replacedByPassengerId || ""
     ];
 
     return sheets.spreadsheets.values.update({
@@ -1554,7 +1568,7 @@ async function updatePassenger(
             SPREADSHEET_ID,
 
         range:
-            `${sheetTitle}!A${rowNumber}:M${rowNumber}`,
+            `${sheetTitle}!A${rowNumber}:O${rowNumber}`,
 
         valueInputOption:
             "USER_ENTERED",
@@ -1585,11 +1599,13 @@ function buildPassengerCard(data) {
         `Дата рейса: ${data.flightDate || "—"}\n` +
         `Маршрут: ${data.route || "—"}\n` +
         `✈️ Рейс: ${data.flight || "—"}\n` +
-        `Статус: ${data.status || "—"}`
+        `Статус: ${data.status || "—"}` +
+        (data.replacesPassengerId ? `\nВместо пассажира ID: ${data.replacesPassengerId}` : "") +
+        (data.replacedByPassengerId ? `\nЗамена: ID ${data.replacedByPassengerId}` : "")
     );
 }
 
-function getPassengerCardKeyboard() {
+function getPassengerCardKeyboard(data) {
     return {
         inline_keyboard: [
             [
@@ -1600,6 +1616,10 @@ function getPassengerCardKeyboard() {
                         "passenger_edit"
                 }
             ],
+            ...(data && !isInactiveStatus(data.status) ? [[{
+                text: "🚫 Не явился",
+                callback_data: "passenger_no_show"
+            }]] : []),
             [
                 {
                     text:
@@ -1630,7 +1650,7 @@ async function showPassengerCard(
         buildPassengerCard(
             state.data
         ),
-        getPassengerCardKeyboard()
+        getPassengerCardKeyboard(state.data)
     );
 }
 
@@ -1847,10 +1867,7 @@ async function finishRegistration(
     chatId,
     state
 ) {
-    if (
-        state.data.status !==
-        "Отменен"
-    ) {
+    if (!isInactiveStatus(state.data.status)) {
         const occupancy =
             await calculateRouteOccupancy(
                 state.data.flightDate,
@@ -1901,6 +1918,23 @@ async function finishRegistration(
         await savePassenger(
             state.data
         );
+
+        // Связь видна в колонках N и O. Ошибка связи не теряет новую запись.
+        if (state.data.replacesPassengerId) {
+            try {
+                const oldRows = await getAllPassengers();
+                const oldIndex = oldRows.findIndex((row, index) =>
+                    index > 0 && row[0] === state.data.replacesPassengerId
+                );
+                if (oldIndex > 0) {
+                    const oldPassenger = rowToPassenger(oldRows[oldIndex], oldIndex + 1);
+                    oldPassenger.replacedByPassengerId = state.data.passengerId;
+                    await updatePassenger(oldPassenger.rowNumber, oldPassenger);
+                }
+            } catch (linkError) {
+                console.error("Не удалось связать замену:", linkError);
+            }
+        }
 
         await showPassengerCard(
             chatId,
@@ -2030,7 +2064,9 @@ function rowToPassenger(
         flightDate: row[9] || "",
         route: row[10] || "",
         flight: row[11] || "",
-        status: row[12] || ""
+        status: row[12] || "",
+        replacesPassengerId: row[13] || "",
+        replacedByPassengerId: row[14] || ""
     };
 }
 
@@ -2526,6 +2562,10 @@ async function showViewedPassenger(
                             "view_passenger_edit"
                     }
                 ],
+                ...(!isInactiveStatus(passenger.status) ? [[{
+                    text: "🚫 Не явился",
+                    callback_data: "passenger_no_show"
+                }]] : []),
                 [
                     {
                         text:
@@ -2994,8 +3034,7 @@ async function handleExcelDocument(
             }
 
             if (
-                passenger.status !==
-                "Отменен"
+                !isInactiveStatus(passenger.status)
             ) {
                 const key =
                     `${passenger.flightDate}|${passenger.route}|${normalizeFlight(passenger.flight)}`;
@@ -5411,6 +5450,63 @@ async function handleCallbackQuery(
     /* =========================================
        PASSENGER CARD
     ========================================= */
+
+    if (data === "passenger_no_show") {
+        // Повторное нажатие не должно перезаписывать уже изменённую запись.
+        const rows = await getAllPassengers();
+        const row = rows[Number(state.rowNumber) - 1];
+        if (!row || !state.data.passengerId || row[0] !== state.data.passengerId) {
+            await editMessage(chatId, messageId, "❌ Запись изменилась. Найдите пассажира заново.");
+            return;
+        }
+        const passenger = rowToPassenger(row, Number(state.rowNumber));
+        if (isInactiveStatus(passenger.status)) {
+            await editMessage(chatId, messageId, `Статус пассажира: ${passenger.status}.`, {
+                inline_keyboard: [[{ text: "🏠 Главное меню", callback_data: "passenger_main_menu" }]]
+            });
+            return;
+        }
+        passenger.status = "Не явился";
+        // Подписываем новые колонки при первом использовании функции.
+        const sheets = await getSheets();
+        const sheetTitle = await getSheetTitle();
+        await sheets.spreadsheets.values.update({
+            spreadsheetId: SPREADSHEET_ID,
+            range: `${sheetTitle}!N1:O1`,
+            valueInputOption: "RAW",
+            requestBody: { values: [["Вместо пассажира ID", "Заменён пассажиром ID"]] }
+        });
+        await updatePassenger(passenger.rowNumber, passenger);
+        state.data = passenger;
+        await editMessage(chatId, messageId,
+            `🚫 Пассажир ${passenger.surname} ${passenger.name} отмечен как «Не явился».\nМесто на рейсе ${passenger.flight} освобождено.`, {
+                inline_keyboard: [
+                    [{ text: "➕ Добавить пассажира на это место", callback_data: "no_show_replace" }],
+                    [{ text: "🏠 Главное меню", callback_data: "passenger_main_menu" }]
+                ]
+            });
+        return;
+    }
+
+    if (data === "no_show_replace") {
+        const old = state.data;
+        if (!old || old.status !== "Не явился" || !old.passengerId) {
+            await showMainMenu(chatId, messageId);
+            return;
+        }
+        const replacement = createState();
+        replacement.messageId = messageId;
+        replacement.data = {
+            flightDate: old.flightDate,
+            route: old.route,
+            flight: old.flight,
+            replacesPassengerId: old.passengerId
+        };
+        states.set(chatId, replacement);
+        await editMessage(chatId, messageId,
+            `➕ Замена пассажира ID ${old.passengerId}\n${old.flightDate} · ${old.route} · ${old.flight}\n\nВведите фамилию нового пассажира:`);
+        return;
+    }
 
     if (
         data ===
