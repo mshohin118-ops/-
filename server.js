@@ -29,6 +29,12 @@ const TELEGRAM_WEBHOOK_SECRET =
 const PUBLIC_URL =
     process.env.PUBLIC_URL;
 
+const allowedTelegramUserIds = new Set(
+    String(process.env.ALLOWED_TELEGRAM_USER_IDS || "")
+        .split(/[\s,;]+/)
+        .filter(value => /^[1-9]\d*$/.test(value))
+);
+
 const CAPACITY = 19;
 const PAGE_SIZE = 8;
 
@@ -6101,7 +6107,46 @@ app.post(
 
         res.sendStatus(200);
 
-        try {
+        try {    
+    const message = update.message;
+    const callback = update.callback_query;
+    const actor = message?.from || callback?.from;
+    const chat = message?.chat || callback?.message?.chat;
+    const userId = actor?.id == null ? "" : String(actor.id);
+
+    if (
+        message?.text &&
+        /^\/id(?:@\w+)?(?:\s|$)/i.test(message.text) &&
+        chat?.type === "private" &&
+        userId &&
+        String(chat.id) === userId
+    ) {
+        await sendMessage(
+            chat.id,
+            `Ваш Telegram ID: ${userId}\nПередайте его администратору для добавления в список сотрудников.`
+        );
+        return;
+    }
+
+    if (
+        !userId || !chat || chat.type !== "private" ||
+        String(chat.id) !== userId ||
+        !allowedTelegramUserIds.has(userId)
+    ) {
+        if (callback) {
+            await telegramRequest("answerCallbackQuery", {
+                callback_query_id: callback.id,
+                text: "Доступ закрыт. Напишите боту /id и передайте ID администратору.",
+                show_alert: true
+            });
+        } else if (message && chat?.type === "private" && userId) {
+            await sendMessage(
+                chat.id,
+                "Доступ только для сотрудников. Напишите /id и передайте свой Telegram ID администратору."
+            );
+        }
+        return;
+    }
             /* =====================================
                DOCUMENT / EXCEL
             ===================================== */
