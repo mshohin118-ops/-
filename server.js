@@ -2751,10 +2751,19 @@ async function showViewedPassenger(
 ========================================================= */
 
 function normalizeExcelHeader(value) {
-    return String(value || "")
+    const normalized = String(value || "")
+        .replace(/\uFEFF/g, "")
+        .replace(/[\u00A0\u2007\u202F]/g, " ")
         .trim()
         .replace(/\s+/g, " ")
-        .toLowerCase();
+        .toLowerCase()
+        .replace(/[.:]+$/, "");
+
+    // В разных шаблонах номер рейса называется по-разному.
+    if (["рейс", "номер рейса", "№ рейса", "рейс №", "flight", "flight number", "flight no", "flight no."].includes(normalized)) {
+        return "рейс";
+    }
+    return normalized;
 }
 
 function normalizeExcelPhone(value) {
@@ -3128,7 +3137,9 @@ async function handleExcelDocument(
                 "Правильный формат:\n" +
                 REQUIRED_EXCEL_HEADERS.join(
                     " | "
-                )
+                ) +
+                "\n\nНайдены заголовки в вашем файле:\n" +
+                headers.map((item, index) => `${index + 1}. ${item || "(пусто)"}`).join(" | ")
             );
 
             return;
