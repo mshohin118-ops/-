@@ -1488,176 +1488,10 @@ async function calculateRouteOccupancy(
    SAVE / UPDATE
 ========================================================= */
 /* =========================================================
-   SAVE TO FIRST EMPTY ROW
-   Сначала заполняем первую полностью пустую строку,
-   если пустых строк нет — добавляем в конец.
+   SAVE PASSENGER AT END OF SHEET
+   Новая запись добавляется после последней занятой строки.
 ========================================================= */
 
-async function saveRowsToFirstEmptyRows(rowsToInsert) {
-    if (!rowsToInsert || !rowsToInsert.length) {
-        return [];
-    }
-
-    const sheets = await getSheets();
-    const sheetTitle = await getSheetTitle();
-
-    /*
-     * Получаем все строки таблицы.
-     * rows[0] — заголовок.
-     */
-    const rows = await getAllPassengers();
-
-    const emptyRows = [];
-
-    /*
-     * Ищем полностью пустые строки
-     * начиная со второй строки.
-     */
-    for (let i = 1; i < rows.length; i++) {
-        const row = rows[i] || [];
-
-        const isEmpty = row
-            .slice(0, 15)
-            .every(
-                cell =>
-                    String(cell || "").trim() === ""
-            );
-
-        if (isEmpty) {
-            emptyRows.push(i + 1);
-        }
-    }
-
-    const writes = [];
-    const appendRows = [];
-    const resultRowNumbers = [];
-
-    /*
-     * Сначала используем найденные пустые строки.
-     */
-    for (
-        let i = 0;
-        i < rowsToInsert.length;
-        i++
-    ) {
-        const values = rowsToInsert[i];
-
-        if (emptyRows[i]) {
-            writes.push({
-                range:
-                    `${sheetTitle}!A${emptyRows[i]}:O${emptyRows[i]}`,
-                values: [values]
-            });
-
-            resultRowNumbers.push(
-                emptyRows[i]
-            );
-        } else {
-            appendRows.push(values);
-            resultRowNumbers.push(null);
-        }
-    }
-
-    /*
-     * Записываем данные в существующие пустые строки.
-     */
-    if (writes.length) {
-        await sheets.spreadsheets.values.batchUpdate({
-            spreadsheetId:
-                SPREADSHEET_ID,
-
-            requestBody: {
-                valueInputOption:
-                    "USER_ENTERED",
-
-                data: writes
-            }
-        });
-
-        console.log(
-            `✅ Заполнено пустых строк: ${writes.length}`
-        );
-    }
-
-    /*
-     * Если свободных строк не хватило,
-     * оставшиеся записи добавляем в конец.
-     */
-    if (appendRows.length) {
-        const appendResult =
-            await sheets.spreadsheets.values.append({
-                spreadsheetId:
-                    SPREADSHEET_ID,
-
-                range:
-                    `${sheetTitle}!A:O`,
-
-                valueInputOption:
-                    "USER_ENTERED",
-
-                insertDataOption:
-                    "INSERT_ROWS",
-
-                requestBody: {
-                    values: appendRows
-                }
-            });
-
-        /*
-         * Google Sheets возвращает диапазон,
-         * куда были добавлены строки.
-         */
-        const updatedRange =
-            appendResult.data
-                ?.updates
-                ?.updatedRange;
-
-        if (updatedRange) {
-            const match =
-                updatedRange.match(
-                    /!A(\d+):O(\d+)/
-                );
-
-            if (match) {
-                const startRow =
-                    Number(match[1]);
-
-                for (
-                    let i = 0;
-                    i < appendRows.length;
-                    i++
-                ) {
-                    const index =
-                        resultRowNumbers.indexOf(null);
-
-                    if (index !== -1) {
-                        resultRowNumbers[index] =
-                            startRow + i;
-
-                        resultRowNumbers[
-                            index
-                        ] = startRow + i;
-
-                        /*
-                         * Убираем найденный null,
-                         * чтобы следующий append получил
-                         * следующую строку.
-                         */
-                        resultRowNumbers[
-                            index
-                        ] = startRow + i;
-                    }
-                }
-            }
-        }
-
-        console.log(
-            `✅ Добавлено в конец таблицы: ${appendRows.length}`
-        );
-    }
-
-    return resultRowNumbers;
-}
 async function savePassenger(data) {
     const values = [
         data.passengerId || "",
@@ -1677,24 +1511,42 @@ async function savePassenger(data) {
         data.replacedByPassengerId || ""
     ];
 
-    const rowNumbers =
-        await saveRowsToFirstEmptyRows([
-            values
-        ]);
-
-    if (
-        rowNumbers &&
-        rowNumbers[0]
-    ) {
-        data.rowNumber =
-            rowNumbers[0];
-    } else {
-        const rows =
-            await getAllPassengers();
-
-        data.rowNumber =
-            rows.length;
+    const sheets = await getSheets();
+    const sheetTitle = await getSheetTitle();
+    const metadata = await sheets.spreadsheets.get({
+        spreadsheetId: SPREADSHEET_ID,
+        fields: "sheets(properties(sheetId,title))"
+    });
+    const passengerSheet = (metadata.data.sheets || []).find(
+        sheet => sheet.properties.title === sheetTitle
+    );
+    if (!passengerSheet) {
+        throw new Error("Лист пассажиров не найден");
     }
+
+    // appendCells пишет после последней занятой строки листа без поиска таблицы.
+    await sheets.spreadsheets.batchUpdate({
+        spreadsheetId: SPREADSHEET_ID,
+        requestBody: {
+            requests: [{ appendCells: {
+                sheetId: passengerSheet.properties.sheetId,
+                rows: [{ values: values.map(value => ({
+                    userEnteredValue: { stringValue: String(value) }
+                })) }],
+                fields: "userEnteredValue"
+            } }]
+        }
+    });
+
+    // Номер строки берём по уникальному ID, а не из предположения о пустых строках.
+    const rows = await getAllPassengers();
+    const index = rows.findIndex((row, i) =>
+        i > 0 && row[0] === data.passengerId
+    );
+    if (index < 1) {
+        throw new Error(`Пассажир ID ${data.passengerId} сохранён, но его строка не найдена`);
+    }
+    data.rowNumber = index + 1;
 
     await auditSafely({
         action: data.replacesPassengerId ? "Добавлена замена" : "Добавлен пассажир",
@@ -1743,6 +1595,9 @@ async function updatePassenger(
         range: `${sheetTitle}!A${rowNumber}:O${rowNumber}`
     });
     const old = previous.data.values?.[0] || [];
+    if (!data.passengerId || String(old[0] || "") !== String(data.passengerId)) {
+        throw new Error("Строка пассажира изменилась. Найдите пассажира заново по ID.");
+    }
 
     const result = await sheets.spreadsheets.values.update({
         spreadsheetId:
