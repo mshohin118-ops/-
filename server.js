@@ -1488,11 +1488,19 @@ async function calculateRouteOccupancy(
    SAVE / UPDATE
 ========================================================= */
 /* =========================================================
-   SAVE PASSENGER AT END OF SHEET
-   Новая запись добавляется после последней занятой строки.
+   SAVE PASSENGER IN FIRST COMPLETELY EMPTY ROW
+   Если внутри списка нет пустой строки, добавляем в конец.
 ========================================================= */
 
+let passengerSaveQueue = Promise.resolve();
+
 async function savePassenger(data) {
+    const operation = passengerSaveQueue.then(() => savePassengerInSheet(data));
+    passengerSaveQueue = operation.catch(() => {});
+    return operation;
+}
+
+async function savePassengerInSheet(data) {
     const values = [
         data.passengerId || "",
         data.surname || "",
@@ -1513,35 +1521,61 @@ async function savePassenger(data) {
 
     const sheets = await getSheets();
     const sheetTitle = await getSheetTitle();
-    const metadata = await sheets.spreadsheets.get({
-        spreadsheetId: SPREADSHEET_ID,
-        fields: "sheets(properties(sheetId,title))"
-    });
-    const passengerSheet = (metadata.data.sheets || []).find(
-        sheet => sheet.properties.title === sheetTitle
+    const existingRows = await getAllPassengers();
+    const isBlank = row => !row || row.every(cell =>
+        cell === null || cell === undefined || String(cell).trim() === ""
     );
-    if (!passengerSheet) {
-        throw new Error("Лист пассажиров не найден");
-    }
+    const emptyIndex = existingRows.findIndex((row, index) =>
+        index > 0 && isBlank(row)
+    );
 
-    // appendCells пишет после последней занятой строки листа без поиска таблицы.
-    await sheets.spreadsheets.batchUpdate({
-        spreadsheetId: SPREADSHEET_ID,
-        requestBody: {
-            requests: [{ appendCells: {
-                sheetId: passengerSheet.properties.sheetId,
-                rows: [{ values: values.map(value => ({
-                    userEnteredValue: { stringValue: String(value) }
-                })) }],
-                fields: "userEnteredValue"
-            } }]
+    if (emptyIndex > 0) {
+        const rowNumber = emptyIndex + 1;
+        const range = `${sheetTitle}!A${rowNumber}:O${rowNumber}`;
+        // Перед записью ещё раз проверяем все 15 колонок, включая пустой ID.
+        const current = await sheets.spreadsheets.values.get({
+            spreadsheetId: SPREADSHEET_ID, range
+        });
+        if (!isBlank(current.data.values?.[0])) {
+            throw new Error("Свободная строка уже занята. Повторите добавление пассажира.");
         }
-    });
+        await sheets.spreadsheets.values.update({
+            spreadsheetId: SPREADSHEET_ID,
+            range,
+            valueInputOption: "RAW",
+            requestBody: { values: [values] }
+        });
+        data.rowNumber = rowNumber;
+    } else {
+        // Когда пустых строк нет, добавляем после последней занятой строки.
+        const metadata = await sheets.spreadsheets.get({
+            spreadsheetId: SPREADSHEET_ID,
+            fields: "sheets(properties(sheetId,title))"
+        });
+        const passengerSheet = (metadata.data.sheets || []).find(
+            sheet => sheet.properties.title === sheetTitle
+        );
+        if (!passengerSheet) {
+            throw new Error("Лист пассажиров не найден");
+        }
+        await sheets.spreadsheets.batchUpdate({
+            spreadsheetId: SPREADSHEET_ID,
+            requestBody: {
+                requests: [{ appendCells: {
+                    sheetId: passengerSheet.properties.sheetId,
+                    rows: [{ values: values.map(value => ({
+                        userEnteredValue: { stringValue: String(value) }
+                    })) }],
+                    fields: "userEnteredValue"
+                } }]
+            }
+        });
+    }
 
     // Номер строки берём по уникальному ID, а не из предположения о пустых строках.
     const rows = await getAllPassengers();
     const index = rows.findIndex((row, i) =>
-        i > 0 && row[0] === data.passengerId
+        i > 0 && String(row[0] || "") === String(data.passengerId)
     );
     if (index < 1) {
         throw new Error(`Пассажир ID ${data.passengerId} сохранён, но его строка не найдена`);
