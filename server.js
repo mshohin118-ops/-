@@ -29,6 +29,9 @@ const TELEGRAM_WEBHOOK_SECRET =
 const PUBLIC_URL =
     process.env.PUBLIC_URL;
 
+// Telegram user ID сотрудников через Render Environment:
+// ALLOWED_TELEGRAM_USER_IDS=123456789,987654321
+// При пустом или ошибочном списке доступ закрыт для всех.
 const allowedTelegramUserIds = new Set(
     String(process.env.ALLOWED_TELEGRAM_USER_IDS || "")
         .split(/[\s,;]+/)
@@ -977,9 +980,27 @@ function getBirthYears(page) {
     return result;
 }
 
+function getDushanbeToday() {
+    const parts = new Intl.DateTimeFormat("en-GB", {
+        timeZone: "Asia/Dushanbe",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit"
+    }).formatToParts(new Date());
+    const value = type => Number(parts.find(part => part.type === type).value);
+    return { year: value("year"), month: value("month") - 1, day: value("day") };
+}
+
+function isPastFlightDate(year, month, day) {
+    const today = getDushanbeToday();
+    return year < today.year ||
+        (year === today.year && month < today.month) ||
+        (year === today.year && month === today.month && day < today.day);
+}
+
 function getFlightYears(page) {
     const currentYear =
-        new Date().getFullYear();
+        getDushanbeToday().year;
 
     const start =
         currentYear +
@@ -1082,8 +1103,9 @@ function getYearsKeyboard(
     };
 }
 
-function getMonthsKeyboard() {
+function getMonthsKeyboard(type, year) {
     const keyboard = [];
+    const flightDateSelection = getBaseCalendarType(type) === "flight";
 
     for (
         let i = 0;
@@ -1099,8 +1121,11 @@ function getMonthsKeyboard() {
         ) {
             row.push({
                 text: MONTHS[j],
-                callback_data:
-                    `calendar_month_${j}`
+                callback_data: flightDateSelection &&
+                    (year < getDushanbeToday().year ||
+                        (year === getDushanbeToday().year && j < getDushanbeToday().month))
+                    ? "calendar_ignore"
+                    : `calendar_month_${j}`
             });
         }
 
@@ -1123,7 +1148,8 @@ function getMonthsKeyboard() {
 
 function getDaysKeyboard(
     year,
-    month
+    month,
+    type
 ) {
     const firstDay =
         new Date(
@@ -1185,8 +1211,10 @@ function getDaysKeyboard(
 
         row.push({
             text: String(day),
-            callback_data:
-                `calendar_day_${day}`
+            callback_data: getBaseCalendarType(type) === "flight" &&
+                isPastFlightDate(year, month, day)
+                ? "calendar_ignore"
+                : `calendar_day_${day}`
         });
     }
 
@@ -1246,7 +1274,7 @@ async function showCalendar(
                 state.calendarType,
                 "month"
             ),
-            getMonthsKeyboard()
+            getMonthsKeyboard(state.calendarType, state.calendarYear)
         );
 
         return;
@@ -1262,7 +1290,8 @@ async function showCalendar(
             ),
             getDaysKeyboard(
                 state.calendarYear,
-                state.calendarMonth
+                state.calendarMonth,
+                state.calendarType
             )
         );
     }
@@ -5069,6 +5098,12 @@ async function handleCallbackQuery(
             base ===
             "flight"
         ) {
+            if (isPastFlightDate(state.calendarYear, state.calendarMonth, day)) {
+                await answerCallbackQuery(callbackQuery.id,
+                    "❌ Нельзя выбрать прошедшую дату рейса");
+                return;
+            }
+
             state.data.flightDate =
                 date;
 
@@ -6107,46 +6142,45 @@ app.post(
 
         res.sendStatus(200);
 
-        try {    
-    const message = update.message;
-    const callback = update.callback_query;
-    const actor = message?.from || callback?.from;
-    const chat = message?.chat || callback?.message?.chat;
-    const userId = actor?.id == null ? "" : String(actor.id);
+        try {
+            const message = update.message;
+            const callback = update.callback_query;
+            const actor = message?.from || callback?.from;
+            const chat = message?.chat || callback?.message?.chat;
+            const userId = actor?.id == null ? "" : String(actor.id);
 
-    if (
-        message?.text &&
-        /^\/id(?:@\w+)?(?:\s|$)/i.test(message.text) &&
-        chat?.type === "private" &&
-        userId &&
-        String(chat.id) === userId
-    ) {
-        await sendMessage(
-            chat.id,
-            `Ваш Telegram ID: ${userId}\nПередайте его администратору для добавления в список сотрудников.`
-        );
-        return;
-    }
+            // Команда /id доступна в личном чате даже до выдачи доступа.
+            if (
+                message?.text &&
+                /^\/id(?:@\w+)?(?:\s|$)/i.test(message.text) &&
+                chat?.type === "private" &&
+                userId &&
+                String(chat.id) === userId
+            ) {
+                await sendMessage(chat.id,
+                    `Ваш Telegram ID: ${userId}\nПередайте его администратору для добавления в список сотрудников.`);
+                return;
+            }
 
-    if (
-        !userId || !chat || chat.type !== "private" ||
-        String(chat.id) !== userId ||
-        !allowedTelegramUserIds.has(userId)
-    ) {
-        if (callback) {
-            await telegramRequest("answerCallbackQuery", {
-                callback_query_id: callback.id,
-                text: "Доступ закрыт. Напишите боту /id и передайте ID администратору.",
-                show_alert: true
-            });
-        } else if (message && chat?.type === "private" && userId) {
-            await sendMessage(
-                chat.id,
-                "Доступ только для сотрудников. Напишите /id и передайте свой Telegram ID администратору."
-            );
-        }
-        return;
-    }
+            // Не обрабатываем пассажирские данные из групп и от чужих ID.
+            if (
+                !userId || !chat || chat.type !== "private" ||
+                String(chat.id) !== userId ||
+                !allowedTelegramUserIds.has(userId)
+            ) {
+                if (callback) {
+                    await telegramRequest("answerCallbackQuery", {
+                        callback_query_id: callback.id,
+                        text: "Доступ закрыт. Напишите боту /id и передайте ID администратору.",
+                        show_alert: true
+                    });
+                } else if (message && chat?.type === "private" && userId) {
+                    await sendMessage(chat.id,
+                        "Доступ только для сотрудников. Напишите /id и передайте свой Telegram ID администратору.");
+                }
+                return;
+            }
+
             /* =====================================
                DOCUMENT / EXCEL
             ===================================== */
