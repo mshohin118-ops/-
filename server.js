@@ -1006,10 +1006,23 @@ async function showStatusMenu(
     chatId,
     state
 ) {
+    const { flightDate, route, flight } = state.data;
+    let occupancyText = "";
+
+    if (flightDate && route && flight) {
+        const occupied = await calculateRouteOccupancy(flightDate, route, flight);
+        const available = Math.max(0, CAPACITY - occupied);
+        occupancyText =
+            `📅 ${flightDate}\n` +
+            `🛫 ${route} · ${flight}\n` +
+            `💺 Занято: ${occupied} из ${CAPACITY}\n` +
+            `Свободно: ${available}\n\n`;
+    }
+
     await editMessage(
         chatId,
         state.messageId,
-        "Выберите статус:",
+        occupancyText + "Выберите статус:",
         getStatusKeyboard()
     );
 }
