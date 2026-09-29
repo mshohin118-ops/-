@@ -3442,10 +3442,6 @@ async function handleExcelDocument(
                 continue;
             }
 
-            existingPassports.add(
-                passportKey
-            );
-
             /* =====================================
                CAPACITY
             ===================================== */
@@ -3489,23 +3485,13 @@ async function handleExcelDocument(
                ADD TO BUFFER
             ===================================== */
 
-            rowsToInsert.push([
-                passengerId,
-                surname,
-                name,
-                patronymic,
-                birthDate,
-                passport,
-                citizenship,
-                contact1,
-                contact2,
-                flightDate,
-                route,
-                flight,
-                status
-            ]);
+            rowsToInsert.push({
+                excelRowNumber, passengerId, surname, name, patronymic,
+                birthDate, passport, citizenship, contact1, contact2,
+                flightDate, route, flight, status
+            });
 
-            added++;
+            existingPassports.add(passportKey);
 
             if (
                 status !== "Отменен"
@@ -3521,37 +3507,17 @@ async function handleExcelDocument(
            INSERT ALL VALID ROWS
         ========================================= */
 
-        if (
-            rowsToInsert.length
-        ) {
-            const sheets =
-                await getSheets();
-
-            const sheetTitle =
-                await getSheetTitle();
-
-            await sheets.spreadsheets.values.append({
-                spreadsheetId:
-                    SPREADSHEET_ID,
-
-                range:
-                    `${sheetTitle}!A:M`,
-
-                valueInputOption:
-                    "USER_ENTERED",
-
-                insertDataOption:
-                    "INSERT_ROWS",
-
-                requestBody: {
-                    values:
-                        rowsToInsert
-                }
-            });
-
-            console.log(
-                `✅ Excel: добавлено строк: ${rowsToInsert.length}`
-            );
+        for (const passenger of rowsToInsert) {
+            try {
+                await savePassenger(passenger);
+                added++;
+            } catch (saveError) {
+                errors++;
+                errorRows.push(
+                    `Строка ${passenger.excelRowNumber}: не удалось записать — ${saveError.message}`
+                );
+                console.error("❌ Ошибка записи пассажира из Excel:", saveError);
+            }
         }
 
         await auditSafely({
@@ -3563,8 +3529,10 @@ async function handleExcelDocument(
            REPORT
         ========================================= */
 
+        const destinationSheet = await getSheetTitle();
         let resultText =
-            "✅ Excel обработан\n\n" +
+            (added ? "✅ Excel обработан\n\n" : "⚠️ Excel обработан, пассажиры не добавлены\n\n") +
+            `Лист таблицы: ${destinationSheet}\n` +
             `➕ Добавлено: ${added}\n` +
             `🔁 Дубликаты паспортов: ${duplicates}\n` +
             `💺 Заполненные рейсы: ${capacityFull}\n` +
