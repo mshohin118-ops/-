@@ -459,6 +459,7 @@ function createState() {
 
         editingField: null,
         pendingStatusComment: null,
+        pendingEditRoute: null,
         rowNumber: null,
         messageId: null,
 
@@ -961,11 +962,38 @@ async function showFlightNumberMenu(
     chatId,
     state
 ) {
+    const flights = state.data.route === "ДШБ — ХРГ"
+        ? [["DW101", "08:00"], ["DW103", "12:00"]]
+        : state.data.route === "ХРГ — ДШБ"
+            ? [["DW102", "10:00"], ["DW104", "14:00"]]
+            : [];
     await editMessage(
         chatId,
         state.messageId,
-        "✈️ Введите номер рейса:\n\nНапример: DW101"
+        "✈️ Выберите рейс:",
+        { inline_keyboard: [
+            ...flights.map(([flight, time]) => [{
+                text: `${flight} — ${time}`,
+                callback_data: `registration_flight_${flight}`
+            }]),
+            [{ text: "↩️ К маршрутам", callback_data: "registration_back_route" }]
+        ] }
     );
+}
+
+async function showEditFlightMenu(chatId, state, route = state.data.route) {
+    const flights = route === "ДШБ — ХРГ"
+        ? [["DW101", "08:00"], ["DW103", "12:00"]]
+        : [["DW102", "10:00"], ["DW104", "14:00"]];
+    await editMessage(chatId, state.messageId, "✈️ Выберите рейс:", {
+        inline_keyboard: [
+            ...flights.map(([flight, time]) => [{
+                text: `${flight} — ${time}`,
+                callback_data: `edit_select_flight_${flight}`
+            }]),
+            [{ text: "↩️ Назад", callback_data: "edit_back" }]
+        ]
+    });
 }
 
 
@@ -4052,29 +4080,7 @@ async function handleTextMessage(
     if (
         state.step === 9
     ) {
-        const flight =
-            normalizeFlight(text);
-
-        if (!flight) {
-            await editMessage(
-                chatId,
-                state.messageId,
-                "❌ Номер рейса не может быть пустым.\n\nВведите номер рейса, например: DW101"
-            );
-
-            return;
-        }
-
-        state.data.flight =
-            flight;
-
-        state.step = 10;
-
-        await showStatusMenu(
-            chatId,
-            state
-        );
-
+        await showFlightNumberMenu(chatId, state);
         return;
     }
 
@@ -5588,6 +5594,17 @@ async function handleCallbackQuery(
         return;
     }
 
+    if (state.step === 9 && data.startsWith("registration_flight_")) {
+        const flight = data.slice("registration_flight_".length);
+        const allowed = state.data.route === "ДШБ — ХРГ"
+            ? ["DW101", "DW103"] : ["DW102", "DW104"];
+        if (!allowed.includes(flight)) return;
+        state.data.flight = flight;
+        state.step = 10;
+        await showStatusMenu(chatId, state);
+        return;
+    }
+
 
     /* =========================================
        STATUS
@@ -5865,15 +5882,8 @@ async function handleCallbackQuery(
         data ===
         "edit_flight"
     ) {
-        state.editingField =
-            "flight";
-
-        await editMessage(
-            chatId,
-            messageId,
-            "✈️ Введите новый номер рейса:"
-        );
-
+        state.pendingEditRoute = null;
+        await showEditFlightMenu(chatId, state);
         return;
     }
 
@@ -6048,53 +6058,34 @@ async function handleCallbackQuery(
                 ? "ДШБ — ХРГ"
                 : "ХРГ — ДШБ";
 
-        const occupancy =
-            await calculateRouteOccupancy(
-                state.data.flightDate,
-                newRoute,
-                state.data.flight,
-                state.rowNumber
-            );
+        state.pendingEditRoute = newRoute;
+        await showEditFlightMenu(chatId, state, newRoute);
+        return;
+    }
 
-        if (
-            state.data.status !==
-                "Отменен" &&
-            occupancy >= CAPACITY
-        ) {
-            await editMessage(
-                chatId,
-                messageId,
-                `❌ Рейс ${state.data.flight} на дату ${state.data.flightDate} по маршруту ${newRoute} заполнен: ${CAPACITY}/${CAPACITY}.`,
-                {
-                    inline_keyboard: [
-                        [
-                            {
-                                text:
-                                    "↩️ Назад",
-                                callback_data:
-                                    "edit_back"
-                            }
-                        ]
-                    ]
-                }
+    if (data.startsWith("edit_select_flight_")) {
+        const route = state.pendingEditRoute || state.data.route;
+        const flight = data.slice("edit_select_flight_".length);
+        const allowed = route === "ДШБ — ХРГ"
+            ? ["DW101", "DW103"] : ["DW102", "DW104"];
+        if (!allowed.includes(flight) || !state.data.passengerId) return;
+        if (!isInactiveStatus(state.data.status)) {
+            const occupancy = await calculateRouteOccupancy(
+                state.data.flightDate, route, flight, state.rowNumber
             );
-
-            return;
+            if (occupancy >= CAPACITY) {
+                await editMessage(chatId, messageId,
+                    `❌ Рейс ${flight} на дату ${state.data.flightDate} заполнен: ${CAPACITY}/${CAPACITY}.`, {
+                        inline_keyboard: [[{ text: "↩️ Назад", callback_data: "edit_back" }]]
+                    });
+                return;
+            }
         }
-
-        state.data.route =
-            newRoute;
-
-        await updatePassenger(
-            state.rowNumber,
-            state.data
-        );
-
-        await showEditMenu(
-            chatId,
-            state
-        );
-
+        state.data.route = route;
+        state.data.flight = flight;
+        await updatePassenger(state.rowNumber, state.data);
+        state.pendingEditRoute = null;
+        await showEditMenu(chatId, state);
         return;
     }
 
