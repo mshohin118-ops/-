@@ -3,6 +3,7 @@ require("dotenv").config();
 const express = require("express");
 const { google } = require("googleapis");
 const XLSX = require("xlsx");
+const { AsyncLocalStorage } = require("async_hooks");
 
 const app = express();
 app.use(express.json());
@@ -93,6 +94,14 @@ const REQUIRED_EXCEL_HEADERS = [
 ];
 
 const states = new Map();
+const auditContext = new AsyncLocalStorage();
+const AUDIT_SHEET_TITLE = "Журнал_бота";
+const AUDIT_HEADERS = [
+    "Время (Душанбе)", "Telegram ID", "Действие", "ID пассажира",
+    "Строка", "Дата рейса", "Маршрут", "Рейс",
+    "Статус до", "Статус после", "Изменённые поля", "Примечание"
+];
+let auditSheetReadyPromise = null;
 
 let cachedSheetTitle = null;
 
@@ -276,9 +285,13 @@ async function getSheetTitle() {
         );
     }
 
-    cachedSheetTitle =
-        spreadsheet.data.sheets[0]
-            .properties.title;
+    const passengerSheet = spreadsheet.data.sheets.find(
+        sheet => sheet.properties.title !== AUDIT_SHEET_TITLE
+    );
+    if (!passengerSheet) {
+        throw new Error("Лист с пассажирами не найден.");
+    }
+    cachedSheetTitle = passengerSheet.properties.title;
 
     console.log(
         "📄 Используется лист:",
@@ -307,6 +320,109 @@ async function getAllPassengers() {
     return result.data.values || [];
 }
 
+
+/* =========================================================
+   ACTION JOURNAL (without passport, contacts or full names)
+========================================================= */
+
+async function ensureAuditSheet() {
+    if (!auditSheetReadyPromise) {
+        auditSheetReadyPromise = (async () => {
+            const sheets = await getSheets();
+            const metadata = await sheets.spreadsheets.get({
+                spreadsheetId: SPREADSHEET_ID,
+                fields: "sheets.properties.title"
+            });
+            const exists = (metadata.data.sheets || []).some(
+                sheet => sheet.properties.title === AUDIT_SHEET_TITLE
+            );
+            if (!exists) {
+                try {
+                    await sheets.spreadsheets.batchUpdate({
+                        spreadsheetId: SPREADSHEET_ID,
+                        requestBody: { requests: [{ addSheet: {
+                            properties: { title: AUDIT_SHEET_TITLE }
+                        } }] }
+                    });
+                } catch (error) {
+                    // Another request may have created the sheet concurrently.
+                    const check = await sheets.spreadsheets.get({
+                        spreadsheetId: SPREADSHEET_ID,
+                        fields: "sheets.properties.title"
+                    });
+                    if (!(check.data.sheets || []).some(
+                        sheet => sheet.properties.title === AUDIT_SHEET_TITLE
+                    )) throw error;
+                }
+            }
+            const header = await sheets.spreadsheets.values.get({
+                spreadsheetId: SPREADSHEET_ID,
+                range: `${AUDIT_SHEET_TITLE}!A1:L1`
+            });
+            const current = header.data.values?.[0] || [];
+            if (current.length && current.join("|") !== AUDIT_HEADERS.join("|")) {
+                throw new Error("Лист журнала уже существует с другими заголовками");
+            }
+            if (!current.length) {
+                await sheets.spreadsheets.values.update({
+                    spreadsheetId: SPREADSHEET_ID,
+                    range: `${AUDIT_SHEET_TITLE}!A1:L1`,
+                    valueInputOption: "RAW",
+                    requestBody: { values: [AUDIT_HEADERS] }
+                });
+            }
+        })().catch(error => {
+            auditSheetReadyPromise = null;
+            throw error;
+        });
+    }
+    return auditSheetReadyPromise;
+}
+
+function dushanbeTimestamp() {
+    return new Intl.DateTimeFormat("en-GB", {
+        timeZone: "Asia/Dushanbe", year: "numeric", month: "2-digit",
+        day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit",
+        hourCycle: "h23"
+    }).format(new Date());
+}
+
+async function appendAudit(event) {
+    const actorId = auditContext.getStore()?.userId;
+    if (!actorId) throw new Error("Отсутствует Telegram ID для журнала");
+    await ensureAuditSheet();
+    const sheets = await getSheets();
+    const row = [
+        dushanbeTimestamp(), actorId, event.action || "", event.passengerId || "",
+        event.rowNumber || "", event.flightDate || "", event.route || "",
+        event.flight || "", event.oldStatus || "", event.newStatus || "",
+        event.changedFields || "", event.note || ""
+    ];
+    await sheets.spreadsheets.values.append({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `${AUDIT_SHEET_TITLE}!A:L`,
+        valueInputOption: "RAW",
+        insertDataOption: "INSERT_ROWS",
+        requestBody: { values: [row] }
+    });
+}
+
+async function auditSafely(event) {
+    try {
+        await appendAudit(event);
+    } catch (error) {
+        // Passenger write has already succeeded. Do not tell the operator it failed.
+        console.error("❌ Не удалось записать действие в журнал:", error);
+    }
+}
+
+const AUDITED_FIELDS = [
+    [1, "Фамилия"], [2, "Имя"], [3, "Отчество"],
+    [4, "Дата рождения"], [5, "Паспорт"], [6, "Гражданство"],
+    [7, "Контакт 1"], [8, "Контакт 2"], [9, "Дата рейса"],
+    [10, "Маршрут"], [11, "Рейс"], [12, "Статус"],
+    [13, "Вместо пассажира ID"], [14, "Заменён пассажиром ID"]
+];
 
 /* =========================================================
    HELPERS
@@ -1567,6 +1683,17 @@ async function savePassenger(data) {
             rows.length;
     }
 
+    await auditSafely({
+        action: data.replacesPassengerId ? "Добавлена замена" : "Добавлен пассажир",
+        passengerId: data.passengerId,
+        rowNumber: data.rowNumber,
+        flightDate: data.flightDate,
+        route: data.route,
+        flight: data.flight,
+        newStatus: data.status,
+        note: data.replacesPassengerId ? `Вместо ID ${data.replacesPassengerId}` : ""
+    });
+
     return true;
 }
 
@@ -1598,7 +1725,13 @@ async function updatePassenger(
         data.replacedByPassengerId || ""
     ];
 
-    return sheets.spreadsheets.values.update({
+    const previous = await sheets.spreadsheets.values.get({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `${sheetTitle}!A${rowNumber}:O${rowNumber}`
+    });
+    const old = previous.data.values?.[0] || [];
+
+    const result = await sheets.spreadsheets.values.update({
         spreadsheetId:
             SPREADSHEET_ID,
 
@@ -1612,6 +1745,26 @@ async function updatePassenger(
             values: [values]
         }
     });
+
+    const changes = AUDITED_FIELDS
+        .filter(([index]) => String(old[index] || "") !== String(values[index] || ""))
+        .map(([, label]) => label);
+    if (changes.length) {
+        await auditSafely({
+            action: old[12] !== values[12] && values[12] === "Не явился"
+                ? "Не явился"
+                : changes.length === 1 && changes[0] === "Статус"
+                    ? "Изменён статус" : "Изменён пассажир",
+            passengerId: data.passengerId,
+            rowNumber, flightDate: data.flightDate,
+            route: data.route, flight: data.flight,
+            oldStatus: old[12] || "", newStatus: data.status,
+            changedFields: changes.join(", "),
+            note: data.replacedByPassengerId && old[14] !== values[14]
+                ? `Заменён ID ${data.replacedByPassengerId}` : ""
+        });
+    }
+    return result;
 }
 
 
@@ -3419,6 +3572,11 @@ async function handleExcelDocument(
                 `✅ Excel: добавлено строк: ${rowsToInsert.length}`
             );
         }
+
+        await auditSafely({
+            action: "Импорт Excel",
+            note: `Добавлено: ${added}; дубликаты: ${duplicates}; заполнено: ${capacityFull}; ошибки: ${errors}`
+        });
 
         /* =========================================
            REPORT
@@ -6181,6 +6339,7 @@ app.post(
                 return;
             }
 
+            await auditContext.run({ userId }, async () => {
             /* =====================================
                DOCUMENT / EXCEL
             ===================================== */
@@ -6217,6 +6376,7 @@ app.post(
                     update.callback_query
                 );
             }
+            });
         } catch (error) {
             console.error(
                 "❌ Ошибка обработки update:",
