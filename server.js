@@ -2106,6 +2106,7 @@ async function finishRegistration(
         await savePassenger(
             state.data
         );
+        state.rowNumber = state.data.rowNumber;
 
         // Связь видна в колонках N и O. Ошибка связи не теряет новую запись.
         if (state.data.replacesPassengerId) {
