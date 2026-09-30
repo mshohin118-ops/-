@@ -190,13 +190,14 @@ function getGoogleAuth() {
         [ "https://www.googleapis.com/auth/spreadsheets"]);
 }
 
-async function getSheets() {
-    const auth = getGoogleAuth();
+let sharedSheetsClient = null;
 
-    return google.sheets({
-        version: "v4",
-        auth
-    });
+async function getSheets() {
+    // Один клиент сохраняет токен Google между запросами вместо новой авторизации.
+    if (!sharedSheetsClient) {
+        sharedSheetsClient = google.sheets({ version: "v4", auth: getGoogleAuth() });
+    }
+    return sharedSheetsClient;
 }
 
 async function getSheetTitle() {
@@ -227,18 +228,32 @@ async function getSheetTitle() {
     return cachedSheetTitle;
 }
 
-async function getAllPassengers() {
-    const sheets = await getSheets();
+function invalidatePassengerSnapshot() {
+    const context = auditContext.getStore();
+    if (context) context.passengerRowsPromise = null;
+}
 
-    const sheetTitle = await getSheetTitle();
-
-    const result = await sheets.spreadsheets.values.get({
+async function getAllPassengers(forceFresh = false) {
+    const context = auditContext.getStore();
+    if (forceFresh) invalidatePassengerSnapshot();
+    const readRows = async () => {
+        const sheets = await getSheets();
+        const sheetTitle = await getSheetTitle();
+        const result = await sheets.spreadsheets.values.get({
             spreadsheetId: SPREADSHEET_ID,
-
             range: `${sheetTitle}!A:P`
         });
-
-    return result.data.values || [];
+        return result.data.values || [];
+    };
+    // Снимок живёт только в рамках одного Telegram update, между нажатиями не хранится.
+    if (context && !context.passengerRowsPromise) {
+        context.passengerRowsPromise = readRows().catch(error => {
+            context.passengerRowsPromise = null;
+            throw error;
+        });
+    }
+    const rows = await (context ? context.passengerRowsPromise : readRows());
+    return rows.map(row => [...row]);
 }
 
 
@@ -1143,7 +1158,7 @@ async function savePassengerInSheet(data) {
 
     const sheets = await getSheets();
     const sheetTitle = await getSheetTitle();
-    const existingRows = await getAllPassengers();
+    const existingRows = await getAllPassengers(true);
     const isBlank = row => !row || row.every(cell =>
         cell === null || cell === undefined || String(cell).trim() === "");
 
@@ -1214,6 +1229,7 @@ async function savePassengerInSheet(data) {
         requestBody: { values: [values] }
     });
     data.rowNumber = rowNumber;
+    invalidatePassengerSnapshot();
 
     // Номер строки берём по уникальному ID, а не из предположения о пустых строках.
     const rows = await getAllPassengers();
@@ -1282,6 +1298,7 @@ async function updatePassenger( rowNumber,
         }
     });
 
+    invalidatePassengerSnapshot();
     const changes = AUDITED_FIELDS.filter(([index]) => String(old[index] || "") !== String(values[index] || ""))
         .map(([, label]) => label);
     if (changes.length) {
@@ -2892,7 +2909,10 @@ async function handleCallbackQuery( callbackQuery) {
 
     state.messageId = messageId;
 
-    await answerCallbackQuery( callbackQuery.id);
+    // Подтверждение нажатия и работа с кнопкой выполняются параллельно.
+    void answerCallbackQuery(callbackQuery.id).catch(error => {
+        console.warn("Не удалось подтвердить нажатие кнопки:", error.message);
+    });
 
 
     // MAIN MENU
