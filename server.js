@@ -1159,6 +1159,15 @@ async function savePassengerInSheet(data) {
     const sheets = await getSheets();
     const sheetTitle = await getSheetTitle();
     const existingRows = await getAllPassengers(true);
+    // Повтор той же операции возвращает уже сохранённую запись.
+    if (data.passengerId) {
+        const existingIndex = existingRows.findIndex((row, index) =>
+            index > 0 && String(row[0] || "") === String(data.passengerId));
+        if (existingIndex > 0) {
+            data.rowNumber = existingIndex + 1;
+            return true;
+        }
+    }
     const isBlank = row => !row || row.every(cell =>
         cell === null || cell === undefined || String(cell).trim() === "");
 
@@ -1498,6 +1507,9 @@ async function showEditContact( chatId,
 
 async function finishRegistration( chatId,
     state) {
+    if (state.registrationSaving || state.registrationSaved) return;
+    state.registrationSaving = true;
+    try {
     if (!isInactiveStatus(state.data.status)) {
         const occupancy = await calculateRouteOccupancy( state.data.flightDate,
                 state.data.route,
@@ -1523,10 +1535,16 @@ async function finishRegistration( chatId,
 
         const existingIds = new Set( rows.slice(1).map(row => row[0]).filter(Boolean));
 
-        state.data.passengerId = generatePassengerId( existingIds);
+        if (!state.data.passengerId) {
+            state.data.passengerId = generatePassengerId(existingIds);
+        }
+        await editMessage(chatId, state.messageId,
+            "⏳ Сохраняю пассажира…", { inline_keyboard: [] });
 
         await savePassenger( state.data);
         state.rowNumber = state.data.rowNumber;
+        state.registrationSaved = true;
+        state.step = 11;
 
         // Связь видна в колонках N и O. Ошибка связи не теряет новую запись.
         if (state.data.replacesPassengerId) {
@@ -1560,6 +1578,10 @@ async function finishRegistration( chatId,
                         }]]
             });
     }
+    } finally {
+        state.registrationSaving = false;
+    }
+
 }
 
 
@@ -3660,6 +3682,9 @@ async function handleCallbackQuery( callbackQuery) {
 
 
     // STATUS
+
+    if ((data === "status_booked" || data === "status_confirmed" || data === "status_cancelled") &&
+        (state.registrationSaving || state.registrationSaved)) return;
 
     if ( state.step === 10 && ( data === "status_booked" || data === "status_confirmed" || data ===
                 "status_cancelled")) {
