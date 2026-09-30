@@ -1,6 +1,8 @@
 {
   "name": "kmrn-passenger-bot",
   "version": "1.0.0",
+  "private": true,
+  "license": "UNLICENSED",
   "description": "KMRN Passenger Accounting Telegram Bot",
   "main": "server.js",
   "scripts": {
